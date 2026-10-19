@@ -34,7 +34,7 @@ use ee_oracle::cpu::Cpu;
 use ee_oracle::rec::Hand;
 use ee_oracle::mem::Mem;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use winit::keyboard::KeyCode;
@@ -46,6 +46,9 @@ static HOST: AtomicU8 = AtomicU8::new(KB);
 static FIELD: AtomicU8 = AtomicU8::new(KB);
 /// A retail page menu is open (set by the worker after each field): Circle is then the right mouse button (back).
 static MENU: AtomicBool = AtomicBool::new(false);
+/// The gamepad's own button bits (the PS2 bits, after `map_xinput`), for the paths that need the pad alone and not the
+/// keyboard's bits mixed in: the movie and scene skips (retail.rs) look for the Start bit here.
+static PAD_BUTTONS: AtomicU16 = AtomicU16::new(0);
 
 /// Reserved RAM for the substituted strings (see decomp/notes/button_prompts.md for the proof that retail never writes it):
 /// `SLOTS` slots of `SLOT` bytes.
@@ -840,7 +843,11 @@ fn pad_state() -> Option<PadState> {
 /// Gamepad input for this field (Retail::tick_keys, window thread): merges the pad's buttons and sticks into the keyboard's and
 /// makes the gamepad the device when `pad_activity` says so. Nothing without a connected pad.
 pub fn poll_pad(buttons: &mut u16, sticks: &mut [u8; 4]) {
-	let Some(mut p) = pad_state() else { return };
+	let Some(mut p) = pad_state() else {
+		// No pad: the skip paths must not see a Start that is no longer there.
+		PAD_BUTTONS.store(0, Ordering::Relaxed);
+		return;
+	};
 	static PREV: Mutex<PadState> = Mutex::new(PadState::IDLE);
 	if let Ok(mut prev) = PREV.lock() {
 		if pad_activity(&prev, &p) {
@@ -854,7 +861,15 @@ pub fn poll_pad(buttons: &mut u16, sticks: &mut [u8; 4]) {
 	if super::modcam::on() {
 		p.buttons &= !2;
 	}
+	// The gamepad's own buttons, for the skip paths (`pad_buttons`).
+	PAD_BUTTONS.store(p.buttons, Ordering::Relaxed);
 	(*buttons, *sticks) = merge((*buttons, *sticks), &p);
+}
+
+/// The gamepad's own button bits (the PS2 bits): the paths that need the pad alone, not the keyboard's bits mixed in, ask
+/// for the Start bit here (the skip press on a gamepad).
+pub fn pad_buttons() -> u16 {
+	PAD_BUTTONS.load(Ordering::Relaxed)
 }
 
 /// One XInput controller (Windows; xinput1_4.dll loaded by name, so no new dependency and nothing on other systems).

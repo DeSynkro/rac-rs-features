@@ -65,8 +65,8 @@ impl Lang {
 pub struct PcOptions {
 	/// None: not chosen yet.
 	pub lang: Option<Lang>,
-	/// Some(true) = Modern, Some(false) = Classic; None: never changed (the default applies).
-	pub camera: Option<bool>,
+	/// The camera style: 0 Classic, 1 Modern, 2 Enhanced; None: never changed (the default applies).
+	pub camera: Option<u8>,
 	/// Some(true) = On; None: never changed.
 	pub strafe: Option<bool>,
 	/// Some(true) = On (Square buys all ammo at a vendor); None: never changed.
@@ -93,6 +93,23 @@ pub struct PcOptions {
 
 /// The Lighting values as the file writes them (index = the Graphics page's value byte).
 pub const LIGHTING: [&str; 2] = ["classic", "enhanced"];
+
+/// The camera styles (index = the Camera row's value byte).
+pub const CAMERA_CLASSIC: u8 = 0;
+pub const CAMERA_MODERN: u8 = 1;
+pub const CAMERA_ENHANCED: u8 = 2;
+/// The camera style names as the file writes them (index = the Camera row's value byte).
+pub const CAMERA_STYLES: [&str; 3] = ["classic", "modern", "enhanced"];
+
+/// A stored camera style: the names above.
+fn camera_value(v: &str) -> Option<u8> {
+	match v.trim().to_ascii_lowercase().as_str() {
+		"classic" => Some(CAMERA_CLASSIC),
+		"modern" => Some(CAMERA_MODERN),
+		"enhanced" => Some(CAMERA_ENHANCED),
+		_ => None,
+	}
+}
 
 /// The Button glyphs values as the file writes them (index = the Graphics page's value byte).
 pub const GLYPHS: [&str; 2] = ["playstation", "xbox"];
@@ -181,9 +198,9 @@ impl PcOptions {
 		self.fullscreen.unwrap_or(false)
 	}
 
-	/// Camera style with the default: Modern.
-	pub fn camera_modern(&self) -> bool {
-		self.camera.unwrap_or(true)
+	/// The camera style with the default: Enhanced.
+	pub fn camera_mode(&self) -> u8 {
+		self.camera.unwrap_or(CAMERA_ENHANCED).min(CAMERA_ENHANCED)
 	}
 
 	/// Buy all ammo with the default: On.
@@ -206,7 +223,7 @@ impl PcOptions {
 			match k.as_str() {
 				"version" => {}
 				"lang" => o.lang = Lang::from_code(v),
-				"camera" => o.camera = flag(v, "modern", "classic"),
+				"camera" => o.camera = camera_value(v),
 				"strafe" => o.strafe = flag(v, "on", "off"),
 				"buyall" => o.buyall = flag(v, "on", "off"),
 				"lighting" => o.lighting = lighting_value(v),
@@ -234,7 +251,7 @@ impl PcOptions {
 			s += &format!("lang={}\n", l.code());
 		}
 		if let Some(c) = self.camera {
-			s += &format!("camera={}\n", if c { "modern" } else { "classic" });
+			s += &format!("camera={}\n", CAMERA_STYLES[(c as usize).min(CAMERA_STYLES.len() - 1)]);
 		}
 		if let Some(t) = self.strafe {
 			s += &format!("strafe={}\n", if t { "on" } else { "off" });
@@ -310,7 +327,7 @@ mod tests {
 		let d = scratch("missing");
 		let o = PcOptions::load(&d.join("pc_options.txt"));
 		assert_eq!(o.lang, None);
-		assert!(o.camera_modern(), "a new player starts with the modern camera");
+		assert_eq!(o.camera_mode(), CAMERA_ENHANCED, "a new player starts with the enhanced camera");
 		assert!(o.strafe_on(), "a new player starts with strafe aiming on");
 		assert!(o.buyall_on(), "a new player starts with buy all ammo on");
 		assert_eq!(o.lighting_or_default(), 0, "a new player sees the retail picture (Lighting Classic)");
@@ -322,16 +339,16 @@ mod tests {
 	fn round_trip_and_atomic_write() {
 		let d = scratch("round");
 		let p = d.join("pc_options.txt");
-		let o = PcOptions { lang: Some(Lang::De), camera: Some(false), strafe: Some(false), buyall: Some(false), ..Default::default() };
+		let o = PcOptions { lang: Some(Lang::De), camera: Some(CAMERA_CLASSIC), strafe: Some(false), buyall: Some(false), ..Default::default() };
 		o.store(&p).unwrap();
 		assert_eq!(std::fs::read_to_string(&p).unwrap(), "version=1\nlang=de\ncamera=classic\nstrafe=off\nbuyall=off\n");
 		assert_eq!(PcOptions::load(&p), o);
 		let names: Vec<_> = std::fs::read_dir(&d).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
 		assert_eq!(names, ["pc_options.txt"], "no temporary file is left behind");
 		// A second write replaces the first.
-		let o2 = PcOptions { camera: Some(true), ..o.clone() };
+		let o2 = PcOptions { camera: Some(CAMERA_MODERN), ..o.clone() };
 		o2.store(&p).unwrap();
-		assert_eq!(PcOptions::load(&p).camera, Some(true));
+		assert_eq!(PcOptions::load(&p).camera, Some(CAMERA_MODERN));
 		let _ = std::fs::remove_dir_all(&d);
 	}
 
@@ -340,12 +357,12 @@ mod tests {
 		let o = PcOptions::parse("\u{feff}version=1\nthis is not a setting\n=\nlang = FR \ncamera=sideways\nstrafe=OFF\n\n");
 		assert_eq!(o.lang, Some(Lang::Fr), "case and spaces do not matter");
 		assert_eq!(o.camera, None, "a bad value falls back to the default for that key only");
-		assert!(o.camera_modern());
+		assert_eq!(o.camera_mode(), CAMERA_ENHANCED, "the default is the enhanced camera");
 		assert_eq!(o.strafe, Some(false));
 		assert_eq!(PcOptions::parse("buyall=OFF\nstrafe=maybe\n").buyall, Some(false));
 		let o = PcOptions::parse("lang=klingon\ncamera=classic\n");
 		assert_eq!(o.lang, None);
-		assert_eq!(o.camera, Some(false));
+		assert_eq!(o.camera, Some(CAMERA_CLASSIC));
 	}
 
 	#[test]

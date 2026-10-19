@@ -270,8 +270,8 @@ pub fn enabled() -> bool {
 	*E.get_or_init(|| !std::env::var("RAC_PC_EXT").is_ok_and(|v| v == "0"))
 }
 
-/// The camera row as the worker last applied it (true = Modern). The defaults hold until `init` / the first field.
-static CAM_MODERN: AtomicBool = AtomicBool::new(true);
+/// The camera row as the worker last applied it (0 Classic, 1 Modern, 2 Enhanced). The defaults hold until `init` / the first field.
+static CAM_MODE: AtomicU8 = AtomicU8::new(pcopts::CAMERA_ENHANCED);
 /// The Button glyphs style: 0 PlayStation (the retail's own glyphs), 1 Xbox (the button names).
 static GLYPH_STYLE: AtomicU8 = AtomicU8::new(1);
 /// The strafe row as last applied (true = On).
@@ -340,14 +340,23 @@ pub fn graphics() -> Graphics {
 }
 
 /// The one gate of the right-mouse-button strafe mode (modcam's aim mode and strafe.rs): the menu's verdict. With the extension
-/// on it is true only while Camera is Modern and Strafe aiming is On. With `RAC_PC_EXT=0` there is no menu, the old switches
+/// on it is true only while Camera is Modern or Enhanced and Strafe aiming is On. With `RAC_PC_EXT=0` there is no menu, the old switches
 /// (`--modern-cam` / RAC_MODERN_CAM, RAC_MOVE_CLASSIC) decide as before and this answers true.
 pub fn strafe_on() -> bool {
-	gate(enabled(), CAM_MODERN.load(Ordering::Relaxed), STRAFE_ON.load(Ordering::Relaxed))
+	gate(enabled(), CAM_MODE.load(Ordering::Relaxed) != pcopts::CAMERA_CLASSIC, STRAFE_ON.load(Ordering::Relaxed))
 }
 
-fn gate(ext: bool, camera_modern: bool, strafe: bool) -> bool {
-	!ext || (camera_modern && strafe)
+fn gate(ext: bool, modern_camera: bool, strafe: bool) -> bool {
+	!ext || (modern_camera && strafe)
+}
+
+/// The name of a camera style (the Camera row's value byte).
+fn camera_name(m: u8) -> &'static str {
+	match m {
+		pcopts::CAMERA_CLASSIC => "Classic",
+		pcopts::CAMERA_MODERN => "Modern",
+		_ => "Enhanced",
+	}
 }
 
 /// Registers the text hands (Retail::load, after modcam's, so a hand of the swarm on the same entry is replaced).
@@ -398,7 +407,7 @@ pub fn init(cold: bool) {
 	eprintln!(
 		"retail: PC options {}: camera {}, strafe aiming {}, language {}, lighting {}, ambient occlusion {}, dynamic shadows {}",
 		path.display(),
-		if opts.camera_modern() { "Modern" } else { "Classic" },
+		camera_name(opts.camera_mode()),
 		if opts.strafe_on() { "On" } else { "Off" },
 		opts.lang.map_or("(not chosen)", |l| l.code()),
 		pcopts::LIGHTING[opts.lighting_or_default() as usize],
@@ -411,12 +420,12 @@ pub fn init(cold: bool) {
 			eprintln!("retail: PC options: cold boot in the remembered language ({})", l.code());
 		}
 	}
-	CAM_MODERN.store(opts.camera_modern(), Ordering::Relaxed);
+	CAM_MODE.store(opts.camera_mode(), Ordering::Relaxed);
 	STRAFE_ON.store(opts.strafe_on(), Ordering::Relaxed);
 	BUYALL_ON.store(opts.buyall_on(), Ordering::Relaxed);
 	GFX.store(pack_gfx(opts.graphics_rows()), Ordering::Relaxed);
 	FULLSCREEN.store(opts.fullscreen_on(), Ordering::Relaxed);
-	modcam::set_active(opts.camera_modern());
+	modcam::set_mode(opts.camera_mode());
 	if let Ok(mut s) = ST.lock() {
 		*s = St { opts, path: Some(path), last: None, glast: None, lang_seen: None, warned: false };
 	}
@@ -459,7 +468,7 @@ fn setup(mem: &mut Mem, s: &mut St) {
 		return;
 	}
 	mem.wr32(BASE, MAGIC);
-	let (c, t, b) = (s.opts.camera_modern() as u8, s.opts.strafe_on() as u8, s.opts.buyall_on() as u8);
+	let (c, t, b) = (s.opts.camera_mode(), s.opts.strafe_on() as u8, s.opts.buyall_on() as u8);
 	mem.wr8(CAM, c);
 	mem.wr8(STRAFE, t);
 	mem.wr8(BUYALL, b);
@@ -478,8 +487,8 @@ fn sync(mem: &mut Mem, level: u32, toggle: bool, s: &mut St) -> bool {
 	setup(mem, s);
 	if toggle {
 		let c = mem.rd8(CAM);
-		mem.wr8(CAM, (c == 0) as u8);
-		eprintln!("retail: F7: camera {}", if c == 0 { "Modern" } else { "Classic" });
+		mem.wr8(CAM, (c + 1) % 3);
+		eprintln!("retail: F7: camera {}", camera_name(mem.rd8(CAM)));
 	}
 	let (c, t, b) = (mem.rd8(CAM), mem.rd8(STRAFE), mem.rd8(BUYALL));
 	if s.last != Some((c, t, b)) {
@@ -523,13 +532,13 @@ fn apply_graphics(s: &mut St, g: [u8; 8], changed: bool) {
 
 /// A row byte changed (or the region was set up): the camera hands and the strafe gate follow; a change is remembered.
 fn apply(s: &mut St, cam: u8, strafe: u8, buyall: u8, changed: bool) {
-	let (cam, strafe, buyall) = (cam == 1, strafe == 1, buyall == 1);
+	let (strafe, buyall) = (strafe == 1, buyall == 1);
 	BUYALL_ON.store(buyall, Ordering::Relaxed);
-	CAM_MODERN.store(cam, Ordering::Relaxed);
+	CAM_MODE.store(cam, Ordering::Relaxed);
 	STRAFE_ON.store(strafe, Ordering::Relaxed);
-	modcam::set_active(cam);
+	modcam::set_mode(cam);
 	if changed {
-		eprintln!("retail: PC options: camera {}, strafe aiming {}", if cam { "Modern" } else { "Classic" }, if strafe { "On" } else { "Off" });
+		eprintln!("retail: PC options: camera {}, strafe aiming {}", camera_name(cam), if strafe { "On" } else { "Off" });
 		s.opts.camera = Some(cam);
 		s.opts.strafe = Some(strafe);
 		s.opts.buyall = Some(buyall);
@@ -547,7 +556,8 @@ fn patch_rows(mem: &mut Mem, level: u32) -> bool {
 	}
 	// The three retail records, then Camera and Strafe, then the zero record.
 	let mut w: Vec<u32> = (0..18).map(|i| mem.rd32(t + 4 * i)).collect();
-	w.extend([ID_CAMERA, CAM, ID_CLASSIC, ID_MODERN, 0, 0]);
+	// A three-choice row: the retail's item counts the value ids (word 2 on), so the third one is the third choice.
+	w.extend([ID_CAMERA, CAM, ID_CLASSIC, ID_MODERN, ID_ENHANCED_F, 0]);
 	w.extend([ID_STRAFE, STRAFE, ID_OFF, ID_ON, 0, 0]);
 	w.extend([ID_BUYALL, BUYALL, ID_OFF, ID_ON, 0, 0]);
 	w.extend([0; 6]);
@@ -987,12 +997,12 @@ mod tests {
 		// The player flips Camera to Classic in the menu (the retail update writes the byte): applied, remembered, strafe follows.
 		m.cpu.mem.wr8(CAM, 0);
 		sync(&mut m.cpu.mem, 4, false, &mut s);
-		assert!(!CAM_MODERN.load(Ordering::Relaxed));
-		assert_eq!(PcOptions::load(&dirp.join("pc_options.txt")).camera, Some(false));
+		assert_eq!(CAM_MODE.load(Ordering::Relaxed), pcopts::CAMERA_CLASSIC);
+		assert_eq!(PcOptions::load(&dirp.join("pc_options.txt")).camera, Some(pcopts::CAMERA_CLASSIC));
 		// F7 flips it back and is consumed.
 		assert!(sync(&mut m.cpu.mem, 4, true, &mut s));
 		assert_eq!(m.cpu.mem.rd8(CAM), 1);
-		assert!(CAM_MODERN.load(Ordering::Relaxed));
+		assert_eq!(CAM_MODE.load(Ordering::Relaxed), pcopts::CAMERA_MODERN);
 		// Strafe Off in the menu.
 		m.cpu.mem.wr8(STRAFE, 0);
 		sync(&mut m.cpu.mem, 4, false, &mut s);
@@ -1008,9 +1018,9 @@ mod tests {
 		assert!(!patch_rows(&mut m.cpu.mem, 99));
 		let _ = std::fs::remove_dir_all(&dirp);
 		// Leave the process-wide state as a fresh run has it.
-		CAM_MODERN.store(true, Ordering::Relaxed);
+		CAM_MODE.store(pcopts::CAMERA_MODERN, Ordering::Relaxed);
 		STRAFE_ON.store(true, Ordering::Relaxed);
-		modcam::set_active(true);
+		modcam::set_mode(pcopts::CAMERA_MODERN);
 	}
 
 	/// On a loaded Eudora state: the Options list gains Graphics before Quit Game (record, description, picture), the row opens a

@@ -22,7 +22,7 @@
 //! Input reaches the worker in `FieldIn::mc` (recorded and replayed with the pad).
 use ee_oracle::cpu::Cpu;
 use ee_oracle::rec::{register_hand, Hand};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
 use crate::retail::disc::va;
 
@@ -46,13 +46,54 @@ pub fn enabled() -> bool {
 	ENABLED.load(Ordering::SeqCst) || std::env::var("RAC_MODERN_CAM").is_ok_and(|v| v != "0" && !v.is_empty()) || super::pcext::enabled()
 }
 
-/// The PC options' Camera row (pcext.rs): Modern = on, Classic = off. Same effect as F7, set from the remembered value.
-pub fn set_active(on: bool) {
+/// The camera mode: 0 Classic (the retail's own camera), 1 Modern, 2 Enhanced (L2 aims, R2 fires).
+static MODE: AtomicU8 = AtomicU8::new(2);
+
+/// The PS2 pad bits the trigger roles use: L2, R2 and the Circle button (the fire button).
+const L2: u16 = 1;
+const R2: u16 = 2;
+const CIRCLE: u16 = 0x20;
+
+/// The camera mode the PC options' Camera row set it: 0 Classic, 1 Modern, 2 Enhanced.
+pub fn mode() -> u8 {
+	MODE.load(Ordering::Relaxed)
+}
+
+/// The PC options' Camera row (pcext.rs): the mode the camera runs in. Same effect as F7, set from the remembered value.
+pub fn set_mode(m: u8) {
+	let m = m.min(2);
+	MODE.store(m, Ordering::Relaxed);
+	// The modern camera drives in both Modern and Enhanced; Classic hands the camera back to retail.
+	let on = m != 0;
 	if let Ok(mut st) = ST.lock() {
 		st.active = on;
 	}
 	if let Ok(mut u) = UI.lock() {
 		u.on = on;
+	}
+}
+
+/// The camera mode's trigger roles, applied to a pad byte (the PS2 bits):
+/// - Classic (0): nothing; the pad reaches the game unchanged.
+/// - Modern (1): R2 aims and is swallowed, L2 stays L2.
+/// - Enhanced (2): L2 aims and is swallowed, R2 becomes the Circle button (it fires like the Circle, which keeps its own
+///   function).
+///
+/// Returns the new pad byte and whether a trigger is held for the aim mode. The keyboard is not touched: the aim stays on the
+/// right mouse button there.
+pub fn triggers(mode: u8, buttons: u16) -> (u16, bool) {
+	match mode {
+		2 => {
+			let aim = buttons & L2 != 0;
+			// R2 is repurposed as the Circle button: it is the Circle now, not a trigger any more.
+			let mut b = buttons & !(L2 | R2);
+			if buttons & R2 != 0 {
+				b |= CIRCLE;
+			}
+			(b, aim)
+		}
+		1 => (buttons & !R2, buttons & R2 != 0),
+		_ => (buttons, false),
 	}
 }
 
@@ -364,8 +405,8 @@ const AIM_CAP_STEP: f32 = 0.15;
 /// Hero states that keep the retail camera (camera.md CAM-7, CAM-1): script freeze, grind, swing, slides, and the
 /// death states (death_respawn.md section 2: 0x3d/0x47/0x7a-0x7d/0x7f/0x80/0x82, pit tumble 0x77).
 const GATE_STATES: [u32; 16] = [0x72, 0x74, 0x2d, 0x29, 0x2a, 0x31, 0x3d, 0x47, 0x77, 0x7a, 0x7b, 0x7c, 0x7d, 0x7f, 0x80, 0x82];
-/// Retail options (savegame.md A25/A26): 0 = Up/Down resp. Left/Right camera reversed; the modern camera's mouse and
-/// right stick follow them.
+/// Retail options (savegame.md A25/A26): 0 = Up/Down resp. Left/Right camera reversed; the modern camera's right stick
+/// follows them (the mouse keeps its own direction).
 const OPT_UD: u32 = 0x15eddc;
 const OPT_LR: u32 = 0x15ede0;
 /// A hero jump longer than this in one field (respawn, teleport) re-seeds the camera from retail's pose.
@@ -872,8 +913,10 @@ fn step(c: &mut Cpu, lv: &'static Lv, rec: u32, st: &mut St) {
 	let dz = |v: f32| if v.abs() < 0.2 { 0.0 } else { v };
 	let lr = if c.mem.rd8(OPT_LR) == 0 { -1.0 } else { 1.0 };
 	let ud = if c.mem.rd8(OPT_UD) == 0 { -1.0 } else { 1.0 };
-	let dyaw = (-(inp.look[0] as f32) * MOUSE * sens + dz(rx) * ROTATE_RATE) * lr;
-	let dpitch = (inp.look[1] as f32 * MOUSE * sens - dz(ry) * TILT_STEP) * ud;
+	// The retail's "Reversed" options (Left/Right, Up/Down movement) reverse the camera: the port applies them to the
+	// gamepad's right stick only, so the mouse keeps its own direction.
+	let dyaw = -(inp.look[0] as f32) * MOUSE * sens + dz(rx) * ROTATE_RATE * lr;
+	let dpitch = inp.look[1] as f32 * MOUSE * sens - dz(ry) * TILT_STEP * ud;
 	st.dist = (st.dist - inp.zoom as f32 * 0.5).clamp(ZOOM.0, ZOOM.1);
 	// Aim mode (RMB): the mouse keeps turning the camera as it does without RMB; nothing is picked or framed.
 	// Aim mode is a ground feature: on a magnetic wall retail stows the guns (0x1413fc) and the facing / aim yaw words are world-z.
@@ -1126,6 +1169,28 @@ mod tests {
 		assert_eq!(f.len(), 2);
 		assert_eq!(f[0], (10, 20, Input { look: [5, -3], aim: true, zoom: 0, toggle: false }));
 		assert_eq!(f[1].2.zoom, 2);
+	}
+
+	/// The camera mode's trigger roles: Classic changes nothing, Modern aims with R2 (and swallows it), Enhanced aims with L2
+	/// (and swallows it) and turns R2 into the Circle button.
+	#[test]
+	fn trigger_roles_per_camera_mode() {
+		const L2: u16 = 1;
+		const R2: u16 = 2;
+		const CIRCLE: u16 = 0x20;
+		// Classic: the pad reaches the game unchanged and nothing aims.
+		assert_eq!(triggers(0, L2 | R2 | CIRCLE), (L2 | R2 | CIRCLE, false));
+		// Modern: R2 aims and is swallowed, L2 stays L2.
+		assert_eq!(triggers(1, L2 | R2), (L2, true));
+		assert_eq!(triggers(1, L2), (L2, false));
+		assert_eq!(triggers(1, R2), (0, true));
+		assert_eq!(triggers(1, CIRCLE), (CIRCLE, false));
+		// Enhanced: L2 aims and is swallowed, R2 becomes the Circle button (the Circle keeps its own function).
+		assert_eq!(triggers(2, L2 | R2), (CIRCLE, true));
+		assert_eq!(triggers(2, L2), (0, true));
+		assert_eq!(triggers(2, R2), (CIRCLE, false));
+		assert_eq!(triggers(2, CIRCLE), (CIRCLE, false));
+		assert_eq!(triggers(2, L2 | R2 | CIRCLE), (CIRCLE, true));
 	}
 
 	fn reset_st() {

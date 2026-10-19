@@ -855,12 +855,12 @@ pub fn poll_pad(buttons: &mut u16, sticks: &mut [u8; 4]) {
 		}
 		*prev = p;
 	}
-	// With the modern camera on, R2 is the aim / strafe mode (RMB on the keyboard) and does not reach the game.
-	let r2 = p.buttons & 2 != 0;
-	super::modcam::pad_aim(r2 && super::modcam::on());
-	if super::modcam::on() {
-		p.buttons &= !2;
-	}
+	// The camera mode's trigger roles: Modern aims with R2, Enhanced with L2 (and R2 fires like the Circle button). With the
+	// modern camera off (Classic, or the F7 toggle) the pad reaches the game unchanged.
+	let m = if super::modcam::on() { super::modcam::mode() } else { 0 };
+	let (b, aim) = super::modcam::triggers(m, p.buttons);
+	super::modcam::pad_aim(aim);
+	p.buttons = b;
 	// The gamepad's own buttons, for the skip paths (`pad_buttons`).
 	PAD_BUTTONS.store(p.buttons, Ordering::Relaxed);
 	(*buttons, *sticks) = merge((*buttons, *sticks), &p);

@@ -99,6 +99,29 @@ pub struct Ctx {
 	pub modern_camera: bool,
 	/// The retail page menu on screen and what its keys press (`menu_keys::screen`); None outside menus.
 	pub menu: Option<super::menu_keys::Screen>,
+	/// A gamepad is the device and the Xbox glyph style is on: the prompts name the buttons A, B, X, Y.
+	pub xbox: bool,
+}
+
+/// The Xbox button names, in the Xbox pad's places (A bottom, B right, X left, Y top: the same as the PS2's Cross, Circle, Square,
+/// Triangle). Each with a short form for a legend line that does not fit with the long one (the stick buttons are two characters
+/// wide where the retail's glyph is one).
+const XBOX: [(u8, &[u8], &[u8]); 10] = [
+	(CROSS, b"A", b"A"),
+	(CIRCLE, b"B", b"B"),
+	(TRIANGLE, b"Y", b"Y"),
+	(SQUARE, b"X", b"X"),
+	(L1, b"LB", b"LB"),
+	(R1, b"RB", b"RB"),
+	(L2, b"LT", b"LT"),
+	(R2, b"RT", b"RT"),
+	(RSTICK, b"R3", b"R"),
+	(LSTICK, b"L3", b"L"),
+];
+
+/// The Xbox name of a glyph code; None for a byte that is not a button glyph. `short` picks the short form.
+fn xbox_name(code: u8, short: bool) -> Option<&'static [u8]> {
+	XBOX.iter().find(|(c, _, _)| *c == code).map(|(_, long, sh)| if short { *sh } else { *long })
 }
 
 /// The key name of a glyph code for the keyboard; None for a byte that is not a button glyph.
@@ -173,6 +196,9 @@ pub fn substitute_text(s: &[u8], ctx: Ctx, id: u32) -> Option<Vec<u8>> {
 	if !s.iter().any(|&b| (CROSS..=LSTICK).contains(&b)) {
 		return None;
 	}
+	if ctx.xbox {
+		return Some(substitute_xbox(s));
+	}
 	let short_line = (CROSS..=LSTICK).contains(&s[0]) && s.len() <= LEGEND_MAX_BYTES;
 	if let Some(sc) = ctx.menu.filter(|_| short_line || MENU_TEXTS.contains(&(id as u16))) {
 		let rest = &s[1..1 + s.iter().skip(1).take_while(|&&b| b >= 0x20).count()];
@@ -222,6 +248,28 @@ pub fn substitute_text(s: &[u8], ctx: Ctx, id: u32) -> Option<Vec<u8>> {
 	Some(o)
 }
 
+/// The Xbox names for a string's glyphs: A, B, X, Y, LB, RB, LT, RT, R3, L3. The retail measures the text it gets, so a line that
+/// is a little wider than the retail's glyph is measured and centred again; only a legend line that would not fit the box needs
+/// the short name of its first glyph (the stick buttons, R3 and L3, are two characters where the retail's glyph is one).
+fn substitute_xbox(s: &[u8]) -> Vec<u8> {
+	let short_line = (CROSS..=LSTICK).contains(&s[0]) && s.len() <= LEGEND_MAX_BYTES;
+	let rest = &s[1..1 + s.iter().skip(1).take_while(|&&b| b >= 0x20).count()];
+	let mut o = Vec::with_capacity(s.len() + 16);
+	for (i, &b) in s.iter().enumerate() {
+		let name = if i == 0 && short_line {
+			let fits = |n: &[u8]| text_px(n) + text_px(rest) <= LEGEND_FIT_PX;
+			xbox_name(b, false).filter(|n| fits(n)).or_else(|| xbox_name(b, true))
+		} else {
+			xbox_name(b, false)
+		};
+		match name {
+			Some(k) => o.extend_from_slice(k),
+			None => o.push(b),
+		}
+	}
+	o
+}
+
 #[cfg(test)]
 thread_local! {
 	/// Tests: the menu screen `ctx_now` reports on this thread (the oracle runs a test's hands on its own thread).
@@ -237,25 +285,32 @@ pub fn test_menu(sc: Option<super::menu_keys::Screen>) {
 fn ctx_now() -> Ctx {
 	#[cfg(test)]
 	if let Some(sc) = TEST_MENU.with(|t| t.get()) {
-		return Ctx { modern_camera: super::modcam::on(), menu: Some(sc) };
+		return Ctx { modern_camera: super::modcam::on(), menu: Some(sc), xbox: xbox_now() };
 	}
-	Ctx { modern_camera: super::modcam::on(), menu: super::menu_keys::current().filter(|_| MENU.load(Ordering::Relaxed)) }
+	Ctx { modern_camera: super::modcam::on(), menu: super::menu_keys::current().filter(|_| MENU.load(Ordering::Relaxed)), xbox: xbox_now() }
 }
 
 /// For any text a game system builds itself (the Gadgetron vendor's boxes): the key name for glyph `code` while the keyboard is
-/// the device, None while the gamepad is (draw retail's glyph then) or when `code` is no button glyph. Reads the device of the
-/// current field, so call it from the worker (inside a hand) or any time after `begin_field`.
+/// the device, the button name while a gamepad is and the Xbox style is on, None while a gamepad is (draw retail's glyph then)
+/// or when `code` is no button glyph. Reads the device of the current field, so call it from the worker (inside a hand) or any
+/// time after `begin_field`.
 pub fn prompt_for(code: u8) -> Option<&'static [u8]> {
-	if !keyboard_now() {
+	if !spell_now() {
 		return None;
 	}
-	key_name(code, ctx_now())
+	let ctx = ctx_now();
+	if ctx.xbox {
+		xbox_name(code, false)
+	} else {
+		key_name(code, ctx)
+	}
 }
 
 /// A bank text the PC draws itself (the title front end's mirror, frontend.rs; each char is one byte of the bank): its glyphs
-/// spelled out as key names while the keyboard is the device (the menu keys while a page menu is open), unchanged otherwise.
+/// spelled out as key names while the keyboard is the device (the menu keys while a page menu is open), as the button names while
+/// a gamepad is and the Xbox style is on, unchanged otherwise.
 pub fn for_text(s: &str) -> String {
-	if !keyboard_now() {
+	if !spell_now() {
 		return s.to_string();
 	}
 	let b: Vec<u8> = s.chars().map(|c| c as u32 as u8).collect();
@@ -266,9 +321,10 @@ pub fn for_text(s: &str) -> String {
 }
 
 /// A whole string a PC extra builds itself (pcext's new text ids, e.g. the vendor's "[Square] Refill" plate line): key names for its
-/// glyphs while the keyboard is the device, None while the gamepad is or when it holds no glyph.
+/// glyphs while the keyboard is the device, the button names while a gamepad is and the Xbox style is on, None while a gamepad is
+/// or when it holds no glyph.
 pub fn for_device(s: &[u8]) -> Option<Vec<u8>> {
-	if !keyboard_now() {
+	if !spell_now() {
 		return None;
 	}
 	substitute(s, ctx_now())
@@ -281,7 +337,7 @@ pub fn for_device(s: &[u8]) -> Option<Vec<u8>> {
 /// (`substitute_text`: in a menu its keys, so the ring says "Q" / "E"); the hand then declines and retail's own wrapper draws
 /// it. With a gamepad, or no glyph: nothing is touched.
 pub fn glyph_draw_hook(c: &mut Cpu) -> bool {
-	if keyboard_now() {
+	if spell_now() {
 		spell_glyphs(c);
 	}
 	// The draw itself: the swarm's hand on this twin when there is one (Eudora font_tex::fx_upload_draw_slot1), else retail.
@@ -365,6 +421,23 @@ pub static GLYPH_HANDS: [Hand; 21] = [
 /// True while the keyboard is the device of the current field.
 pub fn keyboard_now() -> bool {
 	FIELD.load(Ordering::Relaxed) == KB && super::pcext::enabled()
+}
+
+/// True while a gamepad is the device of the current field.
+pub fn pad_now() -> bool {
+	FIELD.load(Ordering::Relaxed) == PAD && super::pcext::enabled()
+}
+
+/// True while the prompts name the buttons the way an Xbox pad does (A, B, X, Y): a gamepad is the device and the option is on.
+/// The keyboard keeps its own names (Space, F, WASD) either way.
+pub fn xbox_now() -> bool {
+	pad_now() && super::pcext::xbox_glyphs()
+}
+
+/// True while the glyphs in a prompt are spelled out as text: with the keyboard (the key names) or with a gamepad and the Xbox
+/// style (the button names). With a gamepad and the PlayStation style, retail draws its own glyphs.
+fn spell_now() -> bool {
+	keyboard_now() || xbox_now()
 }
 
 // ---- device ---------------------------------------------------------------------------------------------------------
@@ -591,7 +664,7 @@ pub fn lookup(c: &mut Cpu) -> bool {
 	if log {
 		eprintln!("prompts: lookup field {} id {:#x} {}", FIELD_NO.load(Ordering::Relaxed), c.g(4) as u32, if keyboard_now() { "kb" } else { "pad" });
 	}
-	if !keyboard_now() {
+	if !spell_now() {
 		return false;
 	}
 	let pc = c.pc;
@@ -900,7 +973,7 @@ mod xinput {
 mod tests {
 	use super::*;
 
-	const KBD: Ctx = Ctx { modern_camera: true, menu: None };
+	const KBD: Ctx = Ctx { modern_camera: true, menu: None, xbox: false };
 
 	/// No swarm hand is displaced by the glyph hook: every hand of ee-hand on a wrapper twin is found as its chain target.
 	#[test]
@@ -929,7 +1002,7 @@ mod tests {
 		assert_eq!(substitute(b"press \x13 three times", KBD).unwrap(), b"press F three times");
 		assert_eq!(substitute(b"\x14/\x15 to view", KBD).unwrap(), b"C/Ctrl to view");
 		assert_eq!(substitute(b"\x18 zooms", KBD).unwrap(), b"Mouse zooms");
-		assert_eq!(substitute(b"\x18 zooms", Ctx { modern_camera: false, menu: None }).unwrap(), b"Q/E/Z/X zooms");
+		assert_eq!(substitute(b"\x18 zooms", Ctx { modern_camera: false, menu: None, xbox: false }).unwrap(), b"Q/E/Z/X zooms");
 		assert_eq!(substitute(b"\x11 fires", KBD).unwrap(), b"LMB fires");
 		assert_eq!(substitute(b"\x11 Back", KBD).unwrap(), b"LMB Back");
 		// Legend lines too long for the box with "Space" use "Spc"; the others and sentences keep "Space".
@@ -949,7 +1022,7 @@ mod tests {
 	fn menu_lines_name_the_menu_keys() {
 		use super::super::menu_keys::{screen, Screen, DEFAULT, MAP, QUIT_GAME};
 		let page = |id| super::super::mouse_menu::MenuSnap { id, ..Default::default() };
-		let ctx = |s: Screen| Ctx { modern_camera: true, menu: Some(s) };
+		let ctx = |s: Screen| Ctx { modern_camera: true, menu: Some(s), xbox: false };
 		let quit = ctx(screen(&page(QUIT_GAME)));
 		assert_eq!(substitute_text(b"\x11 Yes", quit, 0x524f).unwrap(), b"Enter Yes");
 		assert_eq!(substitute_text(b"\x12 No", quit, 0x524b).unwrap(), b"Esc No");

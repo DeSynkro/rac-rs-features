@@ -40,7 +40,7 @@ use ee_oracle::cpu::Cpu;
 use ee_oracle::mem::Mem;
 use ee_oracle::rec::{register_hand, Hand};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// Reserved RAM: all zero in every savestate scanned, below the ELF image (0x100000) and outside the rec/hand range.
@@ -67,8 +67,10 @@ pub const WATER: u32 = BASE + 12;
 pub const PARTICLES: u32 = BASE + 13;
 /// Graphics -> Sun rays: 0 Off, 1 On (with Lighting Enhanced).
 pub const SUNRAYS: u32 = BASE + 14;
+/// Graphics -> Button glyphs: 0 PlayStation (the retail's own glyphs), 1 Xbox (the button names).
+pub const GLYPHS: u32 = BASE + 15;
 /// The Graphics page's row bytes in row order.
-const GROWS: [u32; 7] = [LIGHT, AO, SHADOWS, DISPLAY, WATER, PARTICLES, SUNRAYS];
+const GROWS: [u32; 8] = [LIGHT, AO, SHADOWS, DISPLAY, WATER, PARTICLES, SUNRAYS, GLYPHS];
 /// The copy of the row table (5 records + the zero record).
 const TAB: u32 = BASE + 0x40;
 /// String pool: one 0x40-byte slot per new text (`NEW_IDS` order; 22 slots end at BASE + 0x680).
@@ -76,7 +78,7 @@ const POOL: u32 = BASE + 0x100;
 /// Graphics page (`patch_graphics`): the Options list records (8 + the zero record, 12 bytes each), its row descriptions (8 + 0),
 /// its row pictures (8 ToC records {sector, sectors}), the page (a copy of Camera Options; 0x100 bytes, zero after its 0x60:
 /// the menu engine reads item slots past the page's zero item, retail's own pages are followed by zeros there), its header
-/// item, its multi-choice item and that item's rows (7 + the zero record, 24 bytes each, ending at BASE + 0xb60; prompts.rs starts at
+/// item, its multi-choice item and that item's rows (8 + the zero record, 24 bytes each, ending at BASE + 0xc38; prompts.rs starts at
 /// BASE + 0x1000).
 const OPT_RECS: u32 = BASE + 0x800;
 const OPT_DESC: u32 = BASE + 0x880;
@@ -84,18 +86,19 @@ const OPT_PICS: u32 = BASE + 0x8c0;
 pub const GPAGE: u32 = BASE + 0x900;
 const GHDR: u32 = BASE + 0xa00;
 pub const GVAL: u32 = BASE + 0xa60;
-const GTAB: u32 = BASE + 0xaa0;
+const GTAB: u32 = BASE + 0xb60;
 /// The title's Graphics page (`title_options`): the Options list records (up to 4 + the zero record, 12 bytes each), the page
-/// (a copy of Video Options; 0x100 bytes, zero after its 0x88), its header item, its value item and that item's rows (7 + the
-/// zero record, 20 bytes each: the front end's value item reads 5-word rows), ending at BASE + 0xe80.
-const TRECS: u32 = BASE + 0xc00;
+/// (a copy of Video Options; 0x100 bytes, zero after its 0x88), its header item, its value item and that item's rows (8 + the
+/// zero record, 20 bytes each: the front end's value item reads 5-word rows), ending at BASE + 0xe94. The list records are at
+/// BASE + 0xe94 (they were at BASE + 0xc00, which the in-level row table now uses).
+const TRECS: u32 = BASE + 0xe94;
 pub const TGPAGE: u32 = BASE + 0xc40;
 const TGHDR: u32 = BASE + 0xd40;
 pub const TGVAL: u32 = BASE + 0xda0;
 const TGTAB: u32 = BASE + 0xde0;
 /// The Graphics rows of both pages: label, row byte, the value texts for 0 and 1.
 #[rustfmt::skip]
-const ROWS: [[u32; 4]; 7] = [
+const ROWS: [[u32; 4]; 8] = [
 	[ID_LIGHTING, LIGHT, ID_LIGHT_CLASSIC, ID_ENHANCED],
 	[ID_AO, AO, ID_OFF, ID_ON],
 	[ID_SHADOWS, SHADOWS, ID_OFF, ID_ON],
@@ -103,6 +106,7 @@ const ROWS: [[u32; 4]; 7] = [
 	[ID_WATER, WATER, ID_CLASSIC, ID_ENHANCED_F],
 	[ID_PARTICLES, PARTICLES, ID_PART_CLASSIC, ID_PART_ENHANCED],
 	[ID_SUNRAYS, SUNRAYS, ID_OFF, ID_ON],
+	[ID_GLYPHS, GLYPHS, ID_PS_GLYPHS, ID_XBOX_GLYPHS],
 ];
 /// Front end texts (frontbin): the Options rows Video and Sound, the Video Options header and its one row.
 const FRONT_VIDEO: u32 = 0x4f21;
@@ -147,7 +151,10 @@ pub const ID_ENHANCED_F: u32 = 0x7f14;
 /// Particles' values (plural: les particules, los efectos, le particelle).
 pub const ID_PART_CLASSIC: u32 = 0x7f15;
 pub const ID_PART_ENHANCED: u32 = 0x7f16;
-const NEW_IDS: [u32; 22] = [
+pub const ID_GLYPHS: u32 = 0x7f17;
+pub const ID_PS_GLYPHS: u32 = 0x7f18;
+pub const ID_XBOX_GLYPHS: u32 = 0x7f19;
+const NEW_IDS: [u32; 25] = [
 	ID_CLASSIC,
 	ID_MODERN,
 	ID_STRAFE,
@@ -170,12 +177,15 @@ const NEW_IDS: [u32; 22] = [
 	ID_ENHANCED_F,
 	ID_PART_CLASSIC,
 	ID_PART_ENHANCED,
+	ID_GLYPHS,
+	ID_PS_GLYPHS,
+	ID_XBOX_GLYPHS,
 ];
 
 /// New texts per language (En, Fr, De, Es, It) in the game's font bytes: a-acute 0x84, e-acute 0x8c, e-grave 0x8d, a-umlaut 0x87,
 /// o-acute 0x9c, e-circumflex 0x8e. Short like the retail labels (the German ones are abbreviated to fit). [I] wording, native review wanted. The
 /// Graphics header and description follow the retail Camera Options ones ("Options cam\x8cra", "Adjust camera control settings").
-static TEXTS: [[&[u8]; 5]; 22] = [
+static TEXTS: [[&[u8]; 5]; 25] = [
 	[b"Classic", b"Classique", b"Klassisch", b"Cl\x84sica", b"Classica"],
 	[b"Modern", b"Moderne", b"Modern", b"Moderna", b"Moderna"],
 	[b"Strafe aiming", b"Vis\x8ce lat\x8crale", b"Strafe-Zielen", b"Apuntado lateral", b"Mira laterale"],
@@ -202,6 +212,10 @@ static TEXTS: [[&[u8]; 5]; 22] = [
 	[b"Enhanced", b"Am\x8clior\x8ce", b"Verbessert", b"Mejorada", b"Migliorata"],
 	[b"Classic", b"Classiques", b"Klassisch", b"Cl\x84sicos", b"Classiche"],
 	[b"Enhanced", b"Am\x8clior\x8ces", b"Verbessert", b"Mejorados", b"Migliorate"],
+	// The Button glyphs row: the names of the two styles.
+	[b"Button glyphs", b"Touches de manette", b"Tastensymbole", b"Botones del mando", b"Tasti del gamepad"],
+	[b"PlayStation", b"PlayStation", b"PlayStation", b"PlayStation", b"PlayStation"],
+	[b"Xbox", b"Xbox", b"Xbox", b"Xbox", b"Xbox"],
 ];
 
 /// The retail Camera Options row table per level (index = level byte 0x15ed84): `{0x4fa2, 0x15ede0, 0x4fa5, 0x4fa4, 0, 0}` is its
@@ -258,19 +272,27 @@ pub fn enabled() -> bool {
 
 /// The camera row as the worker last applied it (true = Modern). The defaults hold until `init` / the first field.
 static CAM_MODERN: AtomicBool = AtomicBool::new(true);
+/// The Button glyphs style: 0 PlayStation (the retail's own glyphs), 1 Xbox (the button names).
+static GLYPH_STYLE: AtomicU8 = AtomicU8::new(1);
 /// The strafe row as last applied (true = On).
 static STRAFE_ON: AtomicBool = AtomicBool::new(true);
 /// The buy-all-ammo row as last applied (true = On).
 static BUYALL_ON: AtomicBool = AtomicBool::new(true);
 
 /// The Graphics rows as last applied (`pack_gfx`; default Classic, the rest On / Enhanced for when the player picks Enhanced).
-static GFX: AtomicU32 = AtomicU32::new(pack_gfx([0, 1, 1, 0, 1, 1, 1]));
+static GFX: AtomicU32 = AtomicU32::new(pack_gfx([0, 1, 1, 0, 1, 1, 1, 1]));
 /// The Display mode row as last applied (true = Fullscreen).
 static FULLSCREEN: AtomicBool = AtomicBool::new(false);
 
 /// The Display mode the window should have (viewer/handler.rs, every frame): false with the extension off.
 pub fn fullscreen() -> bool {
 	enabled() && FULLSCREEN.load(Ordering::Relaxed)
+}
+
+/// The Button glyphs style (prompts.rs): true when the prompts name the buttons the way an Xbox pad does (A, B, X, Y) instead of
+/// drawing the retail's own PlayStation glyphs. With the extension off the retail's glyphs are drawn.
+pub fn xbox_glyphs() -> bool {
+	enabled() && GLYPH_STYLE.load(Ordering::Relaxed) == 1
 }
 
 /// The vendor's buy-all-ammo option (vendor.rs): the menu row; false with the extension off (no row, no text, retail exact).
@@ -304,8 +326,8 @@ impl Graphics {
 
 /// The row bytes (`GROWS` order) as one word: lighting in bits 0..8, then one bit per On / Enhanced row (display mode excluded:
 /// `FULLSCREEN`).
-const fn pack_gfx(g: [u8; 7]) -> u32 {
-	g[0] as u32 | ((g[1] == 1) as u32) << 8 | ((g[2] == 1) as u32) << 9 | ((g[4] == 1) as u32) << 10 | ((g[5] == 1) as u32) << 11 | ((g[6] == 1) as u32) << 12
+const fn pack_gfx(g: [u8; 8]) -> u32 {
+	g[0] as u32 | ((g[1] == 1) as u32) << 8 | ((g[2] == 1) as u32) << 9 | ((g[4] == 1) as u32) << 10 | ((g[5] == 1) as u32) << 11 | ((g[6] == 1) as u32) << 12 | ((g[7] == 1) as u32) << 13
 }
 
 /// The Graphics page's verdict (render thread, every frame). Classic with the extension off (`RAC_PC_EXT=0`, the smoke path).
@@ -344,7 +366,7 @@ struct St {
 	/// The row bytes last seen in RAM (None: the region was not set up yet).
 	last: Option<(u8, u8, u8)>,
 	/// The Graphics row bytes last seen in RAM (`GROWS` order).
-	glast: Option<[u8; 7]>,
+	glast: Option<[u8; 8]>,
 	/// The language word last seen by the watcher.
 	lang_seen: Option<u32>,
 	/// A failed write was reported.
@@ -476,21 +498,23 @@ fn sync(mem: &mut Mem, level: u32, toggle: bool, s: &mut St) -> bool {
 }
 
 /// A Graphics byte changed (or the region was set up): the renderer follows (`graphics`); a change is remembered.
-fn apply_graphics(s: &mut St, g: [u8; 7], changed: bool) {
+fn apply_graphics(s: &mut St, g: [u8; 8], changed: bool) {
 	GFX.store(pack_gfx(g), Ordering::Relaxed);
 	FULLSCREEN.store(g[3] == 1, Ordering::Relaxed);
+	GLYPH_STYLE.store(g[7].min(1), Ordering::Relaxed);
 	if changed {
 		let on = |v: u8| if v == 1 { "On" } else { "Off" };
 		let enh = |v: u8| if v == 1 { "Enhanced" } else { "Classic" };
 		eprintln!(
-			"retail: PC options: lighting {}, ambient occlusion {}, dynamic shadows {}, display {}, water {}, particles {}, sun rays {}",
+			"retail: PC options: lighting {}, ambient occlusion {}, dynamic shadows {}, display {}, water {}, particles {}, sun rays {}, button glyphs {}",
 			pcopts::LIGHTING[g[0] as usize],
 			on(g[1]),
 			on(g[2]),
 			if g[3] == 1 { "Fullscreen" } else { "Windowed" },
 			enh(g[4]),
 			enh(g[5]),
-			on(g[6])
+			on(g[6]),
+			pcopts::GLYPHS[(g[7] as usize).min(pcopts::GLYPHS.len() - 1)]
 		);
 		s.opts.set_graphics_rows(g);
 		s.save();
@@ -770,7 +794,7 @@ fn build_title(mem: &mut Mem, pc: u32, item: u32, s: &mut St) -> Option<u64> {
 /// values last applied.
 pub fn title_rows() -> Vec<(u32, u32)> {
 	let g = GFX.load(Ordering::Relaxed);
-	let on = [g & 0xff != 0, g >> 8 & 1 != 0, g >> 9 & 1 != 0, FULLSCREEN.load(Ordering::Relaxed), g >> 10 & 1 != 0, g >> 11 & 1 != 0, g >> 12 & 1 != 0];
+	let on = [g & 0xff != 0, g >> 8 & 1 != 0, g >> 9 & 1 != 0, FULLSCREEN.load(Ordering::Relaxed), g >> 10 & 1 != 0, g >> 11 & 1 != 0, g >> 12 & 1 != 0, g >> 13 & 1 != 0];
 	ROWS.iter().zip(on).map(|(r, v)| (r[0], if v { r[3] } else { r[2] })).collect()
 }
 
@@ -1041,8 +1065,9 @@ mod tests {
 		assert_eq!(row(mem, 4), [ID_WATER, WATER, ID_CLASSIC, ID_ENHANCED_F, 0, 0]);
 		assert_eq!(row(mem, 5), [ID_PARTICLES, PARTICLES, ID_PART_CLASSIC, ID_PART_ENHANCED, 0, 0]);
 		assert_eq!(row(mem, 6), [ID_SUNRAYS, SUNRAYS, ID_OFF, ID_ON, 0, 0]);
-		assert_eq!(row(mem, 7), [0; 6]);
-		assert_eq!(GROWS.map(|a| mem.rd8(a)), [0, 1, 1, 0, 1, 1, 1], "new player: Classic, AO / shadows On, Windowed, the rest Enhanced / On");
+		assert_eq!(row(mem, 7), [ID_GLYPHS, GLYPHS, ID_PS_GLYPHS, ID_XBOX_GLYPHS, 0, 0]);
+		assert_eq!(row(mem, 8), [0; 6]);
+		assert_eq!(GROWS.map(|a| mem.rd8(a)), [0, 1, 1, 0, 1, 1, 1, 1], "new player: Classic, AO / shadows On, Windowed, the rest Enhanced / On, the Xbox glyphs");
 		assert!(!fullscreen());
 		assert_eq!(graphics(), Graphics { lighting: 0, ao: true, shadows: true, water: true, particles: true, sun_rays: true });
 		// Idempotent; a level reload (fresh overlay data) patches again.
@@ -1080,7 +1105,7 @@ mod tests {
 		assert_eq!(mem.rd8(DISPLAY), 1, "fresh RAM takes the remembered display mode");
 		assert!(fullscreen());
 		let _ = std::fs::remove_dir_all(&dirp);
-		GFX.store(pack_gfx([0, 1, 1, 0, 1, 1, 1]), Ordering::Relaxed);
+		GFX.store(pack_gfx([0, 1, 1, 0, 1, 1, 1, 1]), Ordering::Relaxed);
 		FULLSCREEN.store(false, Ordering::Relaxed);
 	}
 
@@ -1148,7 +1173,7 @@ mod tests {
 		for (i, r) in ROWS.iter().enumerate() {
 			assert_eq!(row(&mut m, i as u32), [r[0], r[1], r[2], r[3], 0]);
 		}
-		assert_eq!(row(&mut m, 7), [0; 5]);
+		assert_eq!(row(&mut m, 8), [0; 5]);
 		// Re-entry: the list's runtime word stays, the page is rebuilt (the cursor back on the first row).
 		m.wr32(TRECS + 8, 0x77);
 		m.wr32(TGVAL + 0x38, 3);
@@ -1174,7 +1199,7 @@ mod tests {
 			assert_eq!((m.rd32(item + 0x34), m.rd32(TRECS)), (0x1d4790, 0), "case {bad}");
 		}
 		let _ = std::fs::remove_dir_all(&dirp);
-		GFX.store(pack_gfx([0, 1, 1, 0, 1, 1, 1]), Ordering::Relaxed);
+		GFX.store(pack_gfx([0, 1, 1, 0, 1, 1, 1, 1]), Ordering::Relaxed);
 		FULLSCREEN.store(false, Ordering::Relaxed);
 	}
 }

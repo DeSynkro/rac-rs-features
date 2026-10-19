@@ -85,10 +85,25 @@ while test (count $args) -gt 0
     end
 end
 
+# The folder the setup writes its logs, stamps and the play configuration to.
+set -l gen generated
+
 # From here on the ISO is a plain path. It may contain spaces and '&' (for example
 # ".../Ratchet & Clank/Roms/Ratchet & Clank.iso"), so it is only ever passed as one
 # element of a command list, never interpolated into a command string.
-test (count $iso) -gt 0; or Fail 'no disc image given (use --iso "<path to your .iso>")'
+# Without --iso the disc of the last run is used (generated/play.cfg), so a rebuild
+# needs no arguments at all.
+if test -z "$iso"; and test -f $gen/play.cfg
+    for line in (cat $gen/play.cfg)
+        if string match -q 'iso=*' -- $line
+            set iso (string replace -r '^iso=' '' -- $line | string trim)
+        end
+    end
+    if test -n "$iso"
+        printf '  disc image: %s (from generated/play.cfg)\n' $iso
+    end
+end
+test -n "$iso"; or Fail 'no disc image given (use --iso "<path to your .iso>")'
 test -f "$iso"; or Fail "disc image not found: $iso"
 
 # The version this tree is, from the VERSION file (0.2.2). Written into
@@ -151,7 +166,6 @@ if test $check_only -eq 1
     exit 0
 end
 
-set -l gen generated
 mkdir -p $gen
 
 # The stamp is the disc, the generator flags and a hash of the generator files: if any of
@@ -291,6 +305,9 @@ test -d $orc/rec; or Fail 'the generated game code is missing; rerun with --rege
 
 # ---------------------------------------------------------------- (d) build
 Step '(d) building the game (release)'
+# This takes a while: the 427 generated crates are 97% of the compile work. Cargo prints
+# every crate as it goes, so the output below is the progress. Set CARGO_BUILD_JOBS to
+# use fewer cores than the machine has (cargo takes them all otherwise).
 set -l prof $gen/build_profile.toml
 printf '%s\n' '# written by setup.fish (step d): build profile of the generated crates' \
     '[profile.release.package.ee-game]' 'opt-level = 3' 'codegen-units = 1' >$prof
@@ -302,10 +319,14 @@ for p in (find $orc/rec -mindepth 1 -maxdepth 1 -type d)
     printf '\n[profile.release.package.rec-%s]\nopt-level = 3\ncodegen-units = 1\n' \
         (string replace -a _ - (path basename $p)) >>$prof
 end
-cargo build --release --manifest-path rac-rs/Cargo.toml --target-dir build \
-    --bin rac-rs --config $prof
-test $status -eq 0; or Fail 'cargo build failed'
+# nice: the build yields to whatever else the machine is doing (the desktop stays usable).
+nice -n 10 cargo build --release --manifest-path rac-rs/Cargo.toml --target-dir build \
+    --bin rac-rs --config $prof 2>&1 | tee $gen/build.log
+# The pipeline's first status is cargo's (tee's is the second). It is read right away:
+# $pipestatus is overwritten by every command.
+set -l build_rc $pipestatus[1]
 set -l exe build/release/rac-rs
+test "$build_rc" -eq 0; or Fail "cargo build failed (exit $build_rc; the log is in generated/build.log)"
 test -f $exe; or Fail "build finished but $exe is missing"
 printf '  built %s\n' $exe
 printf '%s\n' $build_version >$gen/built_version.txt

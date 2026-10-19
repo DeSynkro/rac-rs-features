@@ -85,12 +85,26 @@ pub struct PcOptions {
 	pub particles: Option<bool>,
 	/// Graphics -> Sun rays: Some(true) = On; None: never changed (On).
 	pub sun_rays: Option<bool>,
+	/// Graphics -> Button glyphs: 0 PlayStation (the retail's own glyphs), 1 Xbox (the button names); None: never changed (Xbox).
+	pub glyphs: Option<u8>,
 	/// Lines this build does not know, kept verbatim on rewrite.
 	extra: Vec<(String, String)>,
 }
 
 /// The Lighting values as the file writes them (index = the Graphics page's value byte).
 pub const LIGHTING: [&str; 2] = ["classic", "enhanced"];
+
+/// The Button glyphs values as the file writes them (index = the Graphics page's value byte).
+pub const GLYPHS: [&str; 2] = ["playstation", "xbox"];
+
+/// A stored Button glyphs value: the names above.
+fn glyphs_value(v: &str) -> Option<u8> {
+	match v.trim().to_ascii_lowercase().as_str() {
+		"playstation" | "ps" | "ps2" => Some(0),
+		"xbox" | "xbox360" => Some(1),
+		_ => None,
+	}
+}
 
 /// A stored Lighting value: the names above, plus the first test build's (original = classic, modern / experimental = enhanced).
 fn lighting_value(v: &str) -> Option<u8> {
@@ -112,7 +126,12 @@ fn flag(v: &str, yes: &str, no: &str) -> Option<bool> {
 
 impl PcOptions {
 	pub const fn new() -> PcOptions {
-		PcOptions { lang: None, camera: None, strafe: None, buyall: None, lighting: None, ao: None, shadows: None, fullscreen: None, water: None, particles: None, sun_rays: None, extra: Vec::new() }
+		PcOptions { lang: None, camera: None, strafe: None, buyall: None, lighting: None, ao: None, shadows: None, fullscreen: None, water: None, particles: None, sun_rays: None, glyphs: None, extra: Vec::new() }
+	}
+
+	/// The Button glyphs with the default: Xbox (1).
+	pub fn glyphs_or_default(&self) -> u8 {
+		self.glyphs.unwrap_or(1).min(1)
 	}
 
 	/// Lighting with the default: Classic (0).
@@ -131,8 +150,8 @@ impl PcOptions {
 	}
 
 	/// The Graphics page's row bytes (retail/pcext.rs `GROWS` order: lighting, ambient occlusion, dynamic shadows, display mode,
-	/// water, particles, sun rays) with the defaults.
-	pub fn graphics_rows(&self) -> [u8; 7] {
+	/// water, particles, sun rays, button glyphs) with the defaults.
+	pub fn graphics_rows(&self) -> [u8; 8] {
 		[
 			self.lighting_or_default(),
 			self.ao_on() as u8,
@@ -141,11 +160,12 @@ impl PcOptions {
 			self.water.unwrap_or(true) as u8,
 			self.particles.unwrap_or(true) as u8,
 			self.sun_rays.unwrap_or(true) as u8,
+			self.glyphs_or_default(),
 		]
 	}
 
 	/// The player chose `g` (`graphics_rows` order): every Graphics key is written.
-	pub fn set_graphics_rows(&mut self, g: [u8; 7]) {
+	pub fn set_graphics_rows(&mut self, g: [u8; 8]) {
 		self.lighting = Some(g[0].min(1));
 		self.ao = Some(g[1] == 1);
 		self.shadows = Some(g[2] == 1);
@@ -153,6 +173,7 @@ impl PcOptions {
 		self.water = Some(g[4] == 1);
 		self.particles = Some(g[5] == 1);
 		self.sun_rays = Some(g[6] == 1);
+		self.glyphs = Some(g[7].min(1));
 	}
 
 	/// Display mode with the default: Windowed (false).
@@ -195,6 +216,7 @@ impl PcOptions {
 				"water" => o.water = flag(v, "enhanced", "classic"),
 				"particles" => o.particles = flag(v, "enhanced", "classic"),
 				"sunrays" => o.sun_rays = flag(v, "on", "off"),
+				"glyphs" => o.glyphs = glyphs_value(v),
 				_ if !k.is_empty() && !k.starts_with('#') => {
 					o.extra.retain(|(e, _)| *e != k);
 					o.extra.push((k, v.to_string()));
@@ -240,6 +262,9 @@ impl PcOptions {
 		}
 		if let Some(t) = self.sun_rays {
 			s += &format!("sunrays={}\n", if t { "on" } else { "off" });
+		}
+		if let Some(g) = self.glyphs {
+			s += &format!("glyphs={}\n", GLYPHS[(g as usize).min(GLYPHS.len() - 1)]);
 		}
 		for (k, v) in &self.extra {
 			s += &format!("{k}={v}\n");
@@ -337,9 +362,9 @@ mod tests {
 		assert_eq!(PcOptions::parse("display=windowed\n").fullscreen, Some(false));
 		assert!(!PcOptions::parse("display=huge\n").fullscreen_on(), "unreadable value: Windowed");
 		let o = PcOptions::parse("water=classic\nparticles=Enhanced\nsunrays=off\n");
-		assert_eq!(o.graphics_rows(), [0, 1, 1, 0, 0, 1, 0]);
+		assert_eq!(o.graphics_rows(), [0, 1, 1, 0, 0, 1, 0, 1]);
 		assert_eq!(o.to_text(), "version=1\nwater=classic\nparticles=enhanced\nsunrays=off\n");
-		assert_eq!(PcOptions::default().graphics_rows(), [0, 1, 1, 0, 1, 1, 1], "defaults: Classic lighting, the rest ready for Enhanced");
+		assert_eq!(PcOptions::default().graphics_rows(), [0, 1, 1, 0, 1, 1, 1, 1], "defaults: Classic lighting, the rest ready for Enhanced, the Xbox glyphs");
 		assert_eq!(PcOptions::parse("lighting=experimental\n").lighting, Some(1));
 		let bad = PcOptions::parse("lighting=rtx\nao=maybe\n");
 		assert_eq!((bad.lighting_or_default(), bad.ao_on()), (0, true), "a bad value falls back to the default");

@@ -13,3 +13,5 @@
 /rac-rs/src/gsfull/vu1_prog*.rs
 /rac-rs/src/gsfull/vu1aot_gen.rs
 /rac-rs/src/particles/orb_tables.rs
+__pycache__/
+*.pyc

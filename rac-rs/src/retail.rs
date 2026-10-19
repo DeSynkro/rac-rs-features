@@ -30,6 +30,7 @@ pub mod aim;
 pub mod pcext;
 pub mod prompts;
 pub mod pspad;
+pub mod lxpad;
 pub mod vendor;
 pub mod pcopts;
 pub mod strafe;

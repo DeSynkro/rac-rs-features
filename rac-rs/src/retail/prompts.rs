@@ -443,7 +443,7 @@ pub fn note_window_event(e: &winit::event::WindowEvent) {
 
 /// Start of the run (Retail::load): says which pad is there (the device stays the keyboard until the pad is used).
 pub fn init() {
-	if super::pcext::enabled() && (xinput::connected() | super::pspad::connected()) {
+	if super::pcext::enabled() && (xinput::connected() | super::pspad::connected() | super::lxpad::connected()) {
 		eprintln!("retail: prompts: gamepad found, keyboard prompts until it is used");
 	}
 }
@@ -746,16 +746,22 @@ pub fn pad_activity(prev: &PadState, now: &PadState) -> bool {
 	now.buttons & !prev.buttons != 0 || (0..4).any(|i| now.sticks[i] != 0x80 && (prev.sticks[i] == 0x80 || (now.sticks[i] as i32 - prev.sticks[i] as i32).abs() > 24))
 }
 
-/// Every connected pad as one: the XInput controller and the PlayStation controller (pspad.rs), merged as `merge` does.
+/// Every connected pad as one: the XInput controller, the PlayStation controller (pspad.rs) and the Linux gamepad (lxpad.rs),
+/// merged as `merge` does.
 fn pad_state() -> Option<PadState> {
 	let ps = super::pspad::state().map(|r| map_xinput(&r));
-	match (xinput::state(), ps) {
-		(Some(x), Some(p)) => {
-			let (buttons, sticks) = merge((x.buttons, x.sticks), &p);
-			Some(PadState { buttons, sticks })
-		}
-		(x, p) => x.or(p),
+	let lx = super::lxpad::state().map(|r| map_xinput(&r));
+	let mut out: Option<PadState> = None;
+	for p in [xinput::state(), ps, lx].into_iter().flatten() {
+		out = Some(match out {
+			Some(o) => {
+				let (buttons, sticks) = merge((o.buttons, o.sticks), &p);
+				PadState { buttons, sticks }
+			}
+			None => p,
+		});
 	}
+	out
 }
 
 /// Gamepad input for this field (Retail::tick_keys, window thread): merges the pad's buttons and sticks into the keyboard's and

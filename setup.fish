@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
 # setup.fish - builds rac-rs (a PC port of Ratchet & Clank, PS2) on Linux from your own disc image.
 #
-# A Linux stand-in for setup.ps1 (which is Windows PowerShell 5.1). It runs the project's own
-# generators and cargo, and nothing else. The Windows tools it replaces are not used here:
-# no rustup, no embeddable Python, no MSYS2 GNU assembler. Your system Rust and Python are used
-# as they are, so the pinned-toolchain download (~1.2 GB) does not happen.
+# A Linux stand-in for the upstream setup.ps1 (which is Windows PowerShell 5.1). It runs the
+# project's own generators and cargo, and nothing else. The Windows tools it replaces are not
+# used here: no rustup, no embeddable Python, no MSYS2 GNU assembler. Your system Rust and
+# Python are used as they are, so the pinned-toolchain download (~1.2 GB) does not happen.
 #
 # Steps, in order:
 #   (b)  check that the .iso is Ratchet & Clank PAL/EU v1.00 (SCES-50916) or USA v1.00 (SCUS-97199)
@@ -14,12 +14,13 @@
 #   (e)  write generated/play.cfg, so ./build/release/rac-rs can start on its own
 #
 # Everything it writes stays inside this folder: oracle/rec, oracle/game, the generated .rs
-# files named by .gitignore, generated/, build/, and player/ once you play.
+# files named by .gitignore, generated/, build/, and player/ once you play. The only thing it
+# can write outside is the application menu entry, and only with --install-launcher.
 #
 # Usage:
+#   ./setup.fish                       # the disc in the rom folder, or the one from the last run
 #   ./setup.fish --iso "<path to your .iso>"
-#   ./setup.fish                       # reuses the .iso from generated/play.cfg
-#   ./setup.fish --check-only --iso ...  # just verify the disc
+#   ./setup.fish --check-only          # just verify the disc
 #
 # Options:
 #   --iso PATH     the disc image (or pass it as the first plain argument)
@@ -28,7 +29,14 @@
 #   --skip-hash    size check only, skip the SHA-1
 #   --regenerate   redo (c) and (c2) even if the stamps say they are current
 #   --no-build     stop after (c2)
+#   --no-pause     do not wait for a key at the end (the default waits, so a run
+#                  started from a file manager keeps its window open)
+#   --install-launcher  add rac-rs.desktop to the application menu
 #   -h, --help     this text
+#
+# The environment:
+#   CARGO_BUILD_JOBS=N   how many cores the compile uses (cargo takes them all otherwise)
+#   CARGO_NO_PAUSE=1     the same as --no-pause
 
 set -l root (realpath (status dirname))
 cd $root
@@ -49,6 +57,8 @@ set -l skip_hash 0
 set -l check_only 0
 set -l regenerate 0
 set -l no_build 0
+set -l no_pause 0
+set -l install_launcher 0
 
 set -l args $argv
 while test (count $args) -gt 0
@@ -73,6 +83,12 @@ while test (count $args) -gt 0
         case --no-build
             set no_build 1
             set -e args[1]
+        case --no-pause
+            set no_pause 1
+            set -e args[1]
+        case --install-launcher
+            set install_launcher 1
+            set -e args[1]
         case -h --help
             set -l self (status filename)
             set -l last (grep -n '^#   -h, --help' $self | cut -d: -f1)
@@ -87,6 +103,8 @@ end
 
 # The folder the setup writes its logs, stamps and the play configuration to.
 set -l gen generated
+# The folder a disc image is dropped into.
+set -l romdir rom
 
 # From here on the ISO is a plain path. It may contain spaces and '&' (for example
 # ".../Ratchet & Clank/Roms/Ratchet & Clank.iso"), so it is only ever passed as one
@@ -99,10 +117,71 @@ if test -z "$iso"; and test -f $gen/play.cfg
             set iso (string replace -r '^iso=' '' -- $line | string trim)
         end
     end
+    # A relative path in the config is relative to this folder.
+    if test -n "$iso"; and not string match -q '/*' -- $iso
+        set iso "$root/$iso"
+    end
     if test -n "$iso"
         printf '  disc image: %s (from generated/play.cfg)\n' $iso
     end
 end
+
+# Still no disc: look in the rom folder.
+if test -z "$iso"
+    # The .iso files in the rom folder.
+    set -l found
+    for f in $romdir/*.iso
+        test -f "$f"; or continue
+        set -a found $f
+    end
+    if test (count $found) -eq 0
+        printf '%s\n' \
+            'No disc image found.' \
+            '' \
+            '  Put your Ratchet & Clank disc image in the rom folder' \
+            '  (any name ending in .iso), or pass it:' \
+            '' \
+            '      ./setup.sh --iso "<path to your disc>.iso"' \
+            '' \
+            '  The supported discs are PAL / Europe v1.00 (SCES-50916) and' \
+            '  USA v1.00 (SCUS-97199).' >&2
+        exit 1
+    end
+    if test (count $found) -eq 1
+        set iso $found[1]
+        printf '  disc image: %s (from the rom folder)\n' $iso
+    else if test -t 0
+        # More than one and a terminal to ask on: let the player pick.
+        printf '\nMore than one disc image in the rom folder:\n'
+        set -l n 0
+        for f in $found
+            set n (math $n + 1)
+            printf '  %d) %s\n' $n $f
+        end
+        printf '\nWhich one? [1-%d] ' (count $found)
+        read -l pick
+        if not string match -qr '^[0-9]+$' -- "$pick"; or test "$pick" -lt 1; or test "$pick" -gt (count $found)
+            Fail 'no disc chosen'
+        end
+        set iso $found[$pick]
+        printf '  disc image: %s\n' $iso
+    else
+        # No terminal to ask on: take the newest and say which. The mtime is the entry's own (stat without -L), so a linked
+        # ISO is dated by when it was linked in, not by the file it points at.
+        set -l newest
+        set -l newest_t 0
+        for f in $found
+            set -l t (stat -c %Y -- $f)
+            if test "$t" -gt "$newest_t"
+                set newest $f
+                set newest_t $t
+            end
+        end
+        set iso $newest
+        printf '  disc image: %s (the newest in the rom folder)\n' $iso
+    end
+end
+
 test -n "$iso"; or Fail 'no disc image given (use --iso "<path to your .iso>")'
 test -f "$iso"; or Fail "disc image not found: $iso"
 
@@ -135,7 +214,8 @@ Step '(b) disc image'
 set -l disc_size 0
 set -l disc_sha1 ''
 set -l disc_name ''
-set -l len (stat -c %s -- $iso)
+# -L: follow a symlink, so an ISO linked into the rom folder is measured by its size and not the link's.
+set -l len (stat -L -c %s -- $iso)
 switch $len
     case 4213997568
         set disc_size 4213997568
@@ -334,8 +414,44 @@ printf '%s\n' $build_version >$gen/built_version.txt
 # ---------------------------------------------------------------- (e) play
 # generated/play.cfg: key=value, UTF-8, LF. The game, started with no arguments, reads it to
 # find the disc image; it then sets the environment itself, so play.fish needs no arguments.
-printf 'iso=%s\n' $iso >$gen/play.cfg
+# The disc path is relative to this folder when the disc is inside it, so the whole folder can
+# be moved (or copied to another machine) and still find the disc. The path is used as it was
+# given, not resolved, so a linked disc stays a link.
+set -l stored $iso
+set -l prefix "$root/"
+if string match -q -- "$prefix*" $iso
+    set stored (string sub -s (math (string length $prefix) + 1) -- $iso)
+end
+printf 'iso=%s\n' $stored >$gen/play.cfg
 printf '  wrote generated/play.cfg\n'
 
 Step 'done'
-printf 'To play:  ./play.fish\n'
+printf 'To play:  ./play.sh\n'
+
+# ---------------------------------------------------------------- launcher (optional)
+# The application menu entry. It is only installed when asked for, so nothing outside this
+# folder is touched otherwise.
+if test $install_launcher -eq 1
+    set -l destdir "$HOME/.local/share/applications"
+    if mkdir -p $destdir
+        # The shipped rac-rs.desktop is a template: the folder and the icon have to be absolute
+        # paths, and the folder is only known here.
+        set -l icon $root/rac-rs/assets/icon/rac-rs-256.png
+        set -l body (cat rac-rs.desktop | string replace -a '__RACRS_DIR__' $root | string replace -a '__RACRS_ICON__' $icon)
+        if printf '%s\n' $body >$destdir/rac-rs.desktop
+            printf '  installed the launcher in %s\n' $destdir
+        else
+            printf '  could not install the launcher in %s (you can copy rac-rs.desktop there yourself)\n' $destdir >&2
+        end
+    else
+        printf '  could not create %s, so the launcher was not installed\n' $destdir >&2
+    end
+end
+
+# ---------------------------------------------------------------- pause
+# Started from a file manager, the window would close at once and the log would be gone
+# with it. So wait for a key. --no-pause (or RAC_NO_PAUSE=1) skips it.
+if test $no_pause -eq 0; and test -z "$RAC_NO_PAUSE"; and test -t 0
+    printf '\nPress enter to close...'
+    read | string collect >/dev/null
+end

@@ -1,5 +1,55 @@
 # Changelog
 
+## Linux fork
+
+This fork carries rac-rs v0.2.2 over to Linux. The game itself is unchanged: it is
+still the original PS2 code, recompiled from your own disc and run on a PS2 CPU
+core written in Rust. What is new here is the platform and the extras.
+
+### Added
+
+- **A native Linux build.** `setup.fish` and `play.fish` replace the Windows
+  `Setup.cmd` and `setup.ps1`. Your system Rust and Python are used as they
+  are, so the 1.2 GB private toolchain download does not happen.
+- **Gamepad support.** Xbox-style and PlayStation controllers are read as
+  evdev devices, with full analog sticks and triggers. A controller connected
+  while the game is running is picked up without a restart.
+- **Xbox button glyphs.** The button prompts can name the buttons the way an
+  Xbox pad does (`A` `B` `X` `Y` `LB` `RB` `LT` `RT` `R3` `L3`) instead of
+  drawing the PlayStation shapes. It is an option in the Graphics page, and
+  Xbox is the default here.
+- **Prompts that follow your hands.** The prompts show the key names with
+  mouse and keyboard, and the button names with a controller, switching by
+  themselves as you use each.
+- **A third camera style, "Enhanced".** L2 aims, like the modern camera's R2,
+  and R2 fires the weapon like the Circle button. The camera row offers
+  Classic, Modern and Enhanced.
+- **The controller skips cutscenes.** Start skips, like Spacebar does. The
+  Insomniac intro at the start of the game can be skipped too.
+- **A `rom` folder.** Drop your disc image in it and the setup finds it. With
+  more than one image the setup asks which to use.
+- **`--install-launcher`** adds a "Ratchet & Clank (rac-rs)" entry to your
+  application menu. It is the only thing the setup writes outside this folder,
+  and only when you ask for it.
+- **A build log** in `generated/build.log`, and the build is `nice`d so your
+  desktop stays usable while it runs.
+- **The unit tests work from a fresh checkout.** They make the folder they
+  write their images to, and the README says how to point them at your
+  disc. Only `retail::memcard` still fails: it wants a savestate from the
+  upstream project's own test data, which is not in a public checkout.
+
+### Changed
+
+- **"Reversed" in the camera options now applies to the right stick only.**
+  The mouse keeps its own direction.
+- **The setup waits for a key at the end**, so a run started from a file
+  manager keeps its window open. `--no-pause` skips the wait.
+
+### Removed
+
+- The Windows installer (`Setup.cmd`, `setup.ps1`) and the automatic updater.
+  They are in the upstream repository, not here.
+
 ## v0.2.2
 
 - Big speed-up: the game logic now needs 30-50% less CPU time on every planet, so busy places like Metropolis (Kerwan), Blarg, Orxon, Hoven, Gemlik and Veldin no longer slow down or stutter. This helps most on older or slower CPUs. The game plays exactly as before: only how fast the PC runs it has changed.

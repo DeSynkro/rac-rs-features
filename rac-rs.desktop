@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Ratchet & Clank (rac-rs)
+GenericName=Ratchet & Clank
+Comment=Build and play Ratchet & Clank on Linux, from your own disc
+Exec=fish -c "cd '__RACRS_DIR__' && ./setup.fish"
+Path=__RACRS_DIR__
+Terminal=true
+Categories=Game;
+Keywords=Ratchet;Clank;
+Icon=__RACRS_ICON__

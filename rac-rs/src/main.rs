@@ -104,15 +104,15 @@ fn message_box(text: &str) {
 
 /// The install root: the first folder from the exe's folder upwards that holds `generated/play.cfg`. Err is the text for a message box.
 fn install_root() -> Result<std::path::PathBuf, String> {
-	let exe = std::env::current_exe().map_err(|e| format!("Cannot find the game folder ({e}). Run Setup.cmd first."))?;
+	let exe = std::env::current_exe().map_err(|e| format!("Cannot find the game folder ({e}). Run setup.sh first."))?;
 	exe.parent()
 		.and_then(|d| d.ancestors().find(|d| d.join("generated").join("play.cfg").is_file()))
 		.map(|d| d.to_path_buf())
-		.ok_or_else(|| "Run Setup.cmd first: the game has not been set up yet (generated/play.cfg not found).".to_string())
+		.ok_or_else(|| "Run setup.sh first: the game has not been set up yet (generated/play.cfg not found).".to_string())
 }
 
-/// [PC] The window title: "rac-rs v0.2.1" from the install root's `generated/built_version.txt` (setup.ps1 writes it after building
-/// this exe, so an update whose files arrived but whose build has not finished still shows the old version), else its VERSION file
+/// [PC] The window title: "rac-rs v0.2.1" from the install root's `generated/built_version.txt` (the setup script writes it after
+/// building this exe, so an update whose files arrived but whose build has not finished still shows the old version), else its VERSION file
 /// (the release the player downloaded), else "rac-rs" (dev and test runs outside an install).
 pub fn app_name() -> &'static str {
 	static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -187,7 +187,7 @@ fn update_check() -> bool {
 /// Runs first thing in `main`, before any thread starts (`set_var` is only sound then).
 fn launch_args() -> Result<Vec<String>, String> {
 	let root = install_root()?;
-	let cfg = std::fs::read(root.join("generated").join("play.cfg")).map_err(|e| format!("Cannot read generated/play.cfg ({e}). Run Setup.cmd again."))?;
+	let cfg = std::fs::read(root.join("generated").join("play.cfg")).map_err(|e| format!("Cannot read generated/play.cfg ({e}). Run setup.sh again."))?;
 	let cfg = String::from_utf8_lossy(&cfg);
 	let (mut iso, mut lang) = (None, None);
 	for line in cfg.trim_start_matches('\u{feff}').lines() {
@@ -199,10 +199,15 @@ fn launch_args() -> Result<Vec<String>, String> {
 			}
 		}
 	}
-	let iso = iso.filter(|i| !i.is_empty()).ok_or("Run Setup.cmd again: generated/play.cfg has no disc image path.")?;
-	if !std::path::Path::new(&iso).is_file() {
-		return Err(format!("Your disc image moved or is gone:\n{iso}\n\nRun Setup.cmd again."));
+	let iso = iso.filter(|i| !i.is_empty()).ok_or("Run setup.sh again: generated/play.cfg has no disc image path.")?;
+	// A relative path in the config is relative to the install root, so the folder can be moved (or copied to another
+	// machine) with the disc inside it and still find it.
+	let iso_path = std::path::Path::new(&iso);
+	let iso_path = if iso_path.is_absolute() { iso_path.to_path_buf() } else { root.join(iso_path) };
+	if !iso_path.is_file() {
+		return Err(format!("Your disc image moved or is gone:\n{}\n\nRun setup.sh again.", iso_path.display()));
 	}
+	let iso = iso_path.to_string_lossy().into_owned();
 	let player = root.join("player");
 	let _ = std::fs::create_dir_all(&player);
 	let skip = std::fs::read_to_string(root.join("oracle").join("hand").join("hand_skip.txt")).map(|t| t.lines().next().unwrap_or("").trim().to_string()).unwrap_or_default();

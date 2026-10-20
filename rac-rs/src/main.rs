@@ -78,7 +78,11 @@ const USAGE: &str = "usage:
 /// application menu, with no terminal there to read, so the log is the record of what went wrong.
 fn crash_log(text: &str) {
 	use std::io::Write;
-	let dir = retail::memcard::player_dir();
+	// The player folder, the same one the saves go in. The game only points RAC_PLAYER_DIR at it once it
+	// starts, so a failure before that is exactly the one worth recording, and the folder is found from the
+	// exe instead. Without an install root there is no game folder to speak of, and the fallback is the
+	// source tree the game was built from.
+	let dir = install_root().map(|r| r.join("player")).unwrap_or_else(|_| retail::memcard::player_dir());
 	let _ = std::fs::create_dir_all(&dir);
 	let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
 	if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("crash.log")) {
@@ -255,6 +259,7 @@ fn main() -> ExitCode {
 		match launch_args() {
 			Ok(a) => args = a,
 			Err(msg) => {
+				crash_log(&msg);
 				message_box(&msg);
 				return ExitCode::from(2);
 			}

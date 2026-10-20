@@ -194,8 +194,6 @@ To add a "Ratchet & Clank (rac-rs)" entry to your application menu, run
 **`./install-desktop-launcher.sh`**. It writes one small file to your home
 folder and nothing else, and it works whichever way you built the game.
 
-Your saves are kept in the `player` folder.
-
 **Do not share or upload the generated files or the built game.** They contain
 code generated from the game disc. Everything the setup creates stays inside
 this folder.
@@ -300,10 +298,10 @@ Run `./play.sh`. It is a plain shell script, so there is nothing to install to
 play. The game starts from your disc, the same way the original did, logos and
 all.
 
-Your saves are kept in the `player` folder. If the game stops with an error
-or a panic, that is written to **`player/crash.log`** as well, so you can read
-it afterwards even if you started the game from the application menu, where
-there was no terminal to read.
+If the game stops with an error or a panic, that is written to
+**`player/crash.log`**, so you can read it afterwards even if you started the
+game from the application menu, where there was no terminal to read.
+
 ## Updating
 
 This fork does not have an automatic updater. Pull the changes instead:

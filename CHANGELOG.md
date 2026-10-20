@@ -53,7 +53,10 @@ core written in Rust. What is new here is the platform and the extras.
 - **The setup waits for a key at the end**, so a run started from a file
   manager keeps its window open. `--no-pause` skips the wait.
 - **`play.sh` no longer needs fish.** It is plain shell now, so you can start
-  the game without installing anything. Fish is only needed to build it.
+  the game without installing anything.
+- **Nothing needs fish any more.** The setup script is plain POSIX shell, so it
+  runs under whatever `/bin/sh` is on your system, and fish is not in the list
+  of things to install.
 - **A crash log on Linux too.** Panics and errors are written to
   `player/crash.log`, the same place the Windows build puts them, so there is
   a record of a failure even when the game was started from the application

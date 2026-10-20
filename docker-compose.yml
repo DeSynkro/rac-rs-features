@@ -1,6 +1,6 @@
 # Builds rac-rs in a Debian 12 container that already has everything the build
 # needs. Nothing has to be installed on your machine: no Rust, no Python, no C
-# headers, no fish.
+# headers, and no fish.
 #
 #   cp /path/to/your-disc.iso rom/
 #   sudo docker compose up
@@ -29,5 +29,5 @@ services:
       - -c
       - |
         trap 'chown -R $(stat -c %u /src):$(stat -c %g /src) /src' EXIT
-        apt-get update && apt-get install -y --no-install-recommends fish python3 build-essential pkg-config libasound2-dev libudev-dev || exit 1
+        apt-get update && apt-get install -y --no-install-recommends python3 build-essential pkg-config libasound2-dev libudev-dev || exit 1
         ./setup.sh --no-pause

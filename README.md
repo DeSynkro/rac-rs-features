@@ -139,18 +139,21 @@ finishes, so nothing is left owned by root.
 | pkg-config | `pkgconf` | `pkg-config` | `pkgconf-pkg-config` |
 | ALSA headers | `alsa-lib` | `libasound2-dev` | `alsa-lib-devel` |
 | libudev headers | `systemd-libs` | `libudev-dev` | `systemd-devel` |
-| fish, the shell the build script uses | `fish` | `fish` | `fish` |
 
 ```sh
 # Arch
-sudo pacman -S --needed rust python gcc pkgconf alsa-lib systemd-libs fish
+sudo pacman -S --needed rust python gcc pkgconf alsa-lib systemd-libs
 
 # Debian / Ubuntu
-sudo apt install rustup python3 build-essential pkg-config libasound2-dev libudev-dev fish
+sudo apt install rustup python3 build-essential pkg-config libasound2-dev libudev-dev
 
 # Fedora
-sudo dnf install rust python3 gcc pkgconf-pkg-config alsa-lib-devel systemd-devel fish
+sudo dnf install rust python3 gcc pkgconf-pkg-config alsa-lib-devel systemd-devel
 ```
+
+Nothing else. The setup script is plain POSIX shell, so it runs under whatever
+`/bin/sh` is on your system: bash on Arch and Fedora, dash on Debian and
+Ubuntu.
 
 ## Setup
 

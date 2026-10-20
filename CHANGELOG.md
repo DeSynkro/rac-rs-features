@@ -54,6 +54,10 @@ core written in Rust. What is new here is the platform and the extras.
   manager keeps its window open. `--no-pause` skips the wait.
 - **`play.sh` no longer needs fish.** It is plain shell now, so you can start
   the game without installing anything. Fish is only needed to build it.
+- **A crash log on Linux too.** Panics and errors are written to
+  `player/crash.log`, the same place the Windows build puts them, so there is
+  a record of a failure even when the game was started from the application
+  menu with no terminal there to read.
 - **`--install-launcher` is now `install-desktop-launcher.sh`.** The flag is
   gone. The script does the same job, and it also works after a Docker build.
 

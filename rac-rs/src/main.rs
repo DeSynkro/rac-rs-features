@@ -74,8 +74,8 @@ const USAGE: &str = "usage:
   rac-rs verify <disc.iso> <file>...           check Wrench-extracted files appear in decompressed blobs
   rac-rs dump   <disc.iso> <sector> <out>      decompress the WAD starting at <sector> into <out>";
 
-/// Without a console (feature `windows_gui`) stderr goes nowhere, so panics and the final error are appended to `<player dir>/crash.log`.
-#[cfg(feature = "windows_gui")]
+/// Panics and the final error are appended to `<player dir>/crash.log`. The game may have been started from the
+/// application menu, with no terminal there to read, so the log is the record of what went wrong.
 fn crash_log(text: &str) {
 	use std::io::Write;
 	let dir = retail::memcard::player_dir();
@@ -235,10 +235,13 @@ fn launch_args() -> Result<Vec<String>, String> {
 
 fn main() -> ExitCode {
 	loadlog::init();
-	#[cfg(feature = "windows_gui")]
-	std::panic::set_hook(Box::new(|info| {
+	// The panic goes to the terminal as usual, and to the crash log as well, so there is a record of it even when the
+	// game was started from the application menu and there was no terminal there to read.
+	let prev_hook = std::panic::take_hook();
+	std::panic::set_hook(Box::new(move |info| {
 		let thread = std::thread::current();
 		crash_log(&format!("panic in thread {}: {info}", thread.name().unwrap_or("?")));
+		prev_hook(info);
 	}));
 	let mut args: Vec<String> = std::env::args().skip(1).collect();
 	// Started by the player: double-clicked (no arguments: the desktop shortcut, Setup's Play) or by Play.cmd (the same cold boot with
@@ -274,11 +277,9 @@ fn main() -> ExitCode {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(e) => {
 			eprintln!("error: {e}");
+			crash_log(&format!("error: {e}"));
 			#[cfg(feature = "windows_gui")]
-			{
-				crash_log(&format!("error: {e}"));
-				message_box(&format!("The game stopped: {e}\n\nDetails are in player/crash.log."));
-			}
+			message_box(&format!("The game stopped: {e}\n\nDetails are in player/crash.log."));
 			ExitCode::FAILURE
 		}
 	}

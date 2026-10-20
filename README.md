@@ -113,6 +113,22 @@ cp /path/to/your-disc.iso rom/
 sudo docker compose up
 ```
 
+The `sudo` is only there because the container installs packages and writes
+to your folder as root. If your user is in the `docker` group, plain
+`docker compose up` does exactly the same thing and you can leave the `sudo`
+out:
+
+```sh
+sudo usermod -aG docker $USER
+```
+
+Log out and back in for that to take effect. Being in the `docker` group
+means you can do anything root can, so only do it if you are comfortable with
+that.
+
+Either way the container hands the files it created back to you when it
+finishes, so nothing is left owned by root.
+
 **Or, if you would rather build it yourself natively,** these packages:
 
 | | Arch | Debian / Ubuntu | Fedora |
@@ -163,7 +179,9 @@ The block above is the quick way. These are the details.
 
 The build stays on screen when it is done, so you can read the log. Set
 `CARGO_BUILD_JOBS=4` to use fewer cores, or pass `--no-pause` to skip the
-wait. A full log is written to `generated/build.log`.
+wait. With Docker, put it in front of the command, as
+`sudo CARGO_BUILD_JOBS=4 docker compose up`. A full log is written to
+`generated/build.log`.
 
 Next time, run **`./play.sh`**.
 
@@ -197,9 +215,11 @@ cd rac-rs-linux
 sudo docker compose down --rmi all --volumes
 ```
 
-The image is 547 MB to download and about 1.5 GB on disk, so it is worth
-taking away. Leave out `--rmi all` if you would rather keep it, so the next
-build does not have to download it again. Your game stays where it is, in
+Leave out the `sudo` here too if your user is in the `docker` group.
+
+The image is roughly 550 MB to download, and more than that on disk, so it is
+worth taking away. Leave out `--rmi all` if you would rather keep it, so the
+next build does not have to download it again. Your game stays where it is, in
 `build/release/rac-rs`, and keeps working.
 
 If you installed Docker only to build this and want it gone again:
@@ -280,6 +300,10 @@ Run `./play.sh`. It is a plain shell script, so there is nothing to install to
 play. The game starts from your disc, the same way the original did, logos and
 all.
 
+Your saves are kept in the `player` folder. If the game stops with an error
+or a panic, that is written to **`player/crash.log`** as well, so you can read
+it afterwards even if you started the game from the application menu, where
+there was no terminal to read.
 ## Updating
 
 This fork does not have an automatic updater. Pull the changes instead:

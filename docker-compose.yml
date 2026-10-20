@@ -28,6 +28,6 @@ services:
       - bash
       - -c
       - |
-        trap 'chown -R $(stat -c %u /src) $(stat -c %g /src) /src' EXIT
+        trap 'chown -R $(stat -c %u /src):$(stat -c %g /src) /src' EXIT
         apt-get update && apt-get install -y --no-install-recommends fish python3 build-essential pkg-config libasound2-dev libudev-dev || exit 1
         ./setup.sh --no-pause

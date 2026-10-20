@@ -8,7 +8,18 @@ core written in Rust. What is new here is the platform and the extras.
 
 ### Added
 
-- **A native Linux build.** `setup.fish` and `play.fish` replace the Windows
+- **A Docker build.** `sudo docker compose up` builds the game in a container
+  that already has everything it needs, so nothing has to be installed on your
+  machine. The container has an older C library than a current desktop, so the
+  game it builds also runs on older systems, a Steam Deck included.
+- **An `install-desktop-launcher.sh` script** adds a "Ratchet & Clank
+  (rac-rs)" entry to your application menu. It writes one small file to your
+  home folder and nothing else, and it works whichever way you built the game.
+- **A `clean.sh` script** removes what the build left behind: the game code
+  generated from your disc and the compiler's working files, a couple of
+  gigabytes in all. It keeps the game and your disc path, so the game still
+  starts.
+- **A native Linux build.** `setup.sh` and `play.sh` replace the Windows
   `Setup.cmd` and `setup.ps1`. Your system Rust and Python are used as they
   are, so the 1.2 GB private toolchain download does not happen.
 - **Gamepad support.** Xbox-style and PlayStation controllers are read as
@@ -28,9 +39,6 @@ core written in Rust. What is new here is the platform and the extras.
   Insomniac intro at the start of the game can be skipped too.
 - **A `rom` folder.** Drop your disc image in it and the setup finds it. With
   more than one image the setup asks which to use.
-- **`--install-launcher`** adds a "Ratchet & Clank (rac-rs)" entry to your
-  application menu. It is the only thing the setup writes outside this folder,
-  and only when you ask for it.
 - **A build log** in `generated/build.log`, and the build is `nice`d so your
   desktop stays usable while it runs.
 - **The unit tests work from a fresh checkout.** They make the folder they
@@ -44,6 +52,10 @@ core written in Rust. What is new here is the platform and the extras.
   The mouse keeps its own direction.
 - **The setup waits for a key at the end**, so a run started from a file
   manager keeps its window open. `--no-pause` skips the wait.
+- **`play.sh` no longer needs fish.** It is plain shell now, so you can start
+  the game without installing anything. Fish is only needed to build it.
+- **`--install-launcher` is now `install-desktop-launcher.sh`.** The flag is
+  gone. The script does the same job, and it also works after a Docker build.
 
 ### Removed
 

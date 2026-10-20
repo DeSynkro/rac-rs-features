@@ -22,6 +22,10 @@ game than fight their way through a build.
 
 ## What this fork adds
 
+- **A Docker build.** `sudo docker compose up` builds the game in a container
+  that already has everything it needs, so there is nothing to install on your
+  machine. It also builds the game against an older C library, so what it
+  produces runs on more systems, a Steam Deck included.
 - **A native Linux build.** One script, no PowerShell, no Windows toolchain,
   and no 1.2 GB private copy of Rust.
 - **Gamepad support.** Xbox-style and PlayStation controllers, over USB or
@@ -85,13 +89,31 @@ project.
   SCES-50916) or **USA v1.00** (serial SCUS-97199). Make an `.iso` image of
   **your own** disc. Other versions (Japan, Platinum and Greatest Hits
   re-releases) are not supported yet. The setup checks the image.
-- **About the USA version:** it plays the same as the PAL version (at 60
-  fields a second, like the original US game), but it has had less testing so
-  far. The PAL version runs at 50, as the original European release did.
+- **About the USA version:** it plays the same as the PAL version, but it has
+  had less testing so far.
 - **A 64-bit Linux** with about **5 GB of free disk space** (the finished
   install takes about 3.5 GB).
 
-To build it you need these:
+To play it you also want a Vulkan driver (`vulkan-radeon`, `vulkan-intel` or
+the proprietary one) and working sound. A gamepad is optional.
+
+> **Tested on CachyOS with KDE Plasma.** Other distributions and desktop
+> environments may need extra packages or a small tweak. If something does
+> not work for you, please open an issue and say what you are on.
+
+### Requirements
+
+**Docker and Docker Compose**, and nothing else. The build runs in a
+container that already has every tool it needs:
+
+```sh
+git clone https://github.com/DeSynkro/rac-rs-linux
+cd rac-rs-linux
+cp /path/to/your-disc.iso rom/
+sudo docker compose up
+```
+
+**Or, if you would rather build it yourself natively,** these packages:
 
 | | Arch | Debian / Ubuntu | Fedora |
 |---|---|---|---|
@@ -101,7 +123,7 @@ To build it you need these:
 | pkg-config | `pkgconf` | `pkg-config` | `pkgconf-pkg-config` |
 | ALSA headers | `alsa-lib` | `libasound2-dev` | `alsa-lib-devel` |
 | libudev headers | `systemd-libs` | `libudev-dev` | `systemd-devel` |
-| fish, the shell the scripts use | `fish` | `fish` | `fish` |
+| fish, the shell the build script uses | `fish` | `fish` | `fish` |
 
 ```sh
 # Arch
@@ -114,46 +136,149 @@ sudo apt install rustup python3 build-essential pkg-config libasound2-dev libude
 sudo dnf install rust python3 gcc pkgconf-pkg-config alsa-lib-devel systemd-devel fish
 ```
 
-To play it you also want a Vulkan driver (`vulkan-radeon`, `vulkan-intel` or
-the proprietary one) and working sound. A gamepad is optional.
-
-> **Tested on CachyOS with KDE Plasma.** Other distributions and desktop
-> environments may need extra packages or a small tweak. If something does
-> not work for you, please open an issue and say what you are on.
-
 ## Setup
+
+The block above is the quick way. These are the details.
 
 1. Download or clone this repository and unpack it anywhere.
 2. Put your disc image in the **`rom`** folder. Any name ending in `.iso`
    works. If you have more than one, the setup asks you which to use.
-3. Run **`./setup.sh`**. It checks the disc, generates the game code from it,
-   and builds the game. This takes about 8 minutes on a 24-thread CPU, or
-   roughly half an hour on a 4-core CPU. You can keep using your computer
-   while it runs.
+3. Build the game.
 
-The window stays open when it is done, so you can read the log. Set
+   With Docker:
+
+   ```sh
+   sudo docker compose up
+   ```
+
+   Or without Docker, if you installed the packages above:
+
+   ```sh
+   ./setup.sh
+   ```
+
+   Either way it checks the disc, generates the game code from it, and builds
+   the game. This takes about 8 minutes on a 24-thread CPU, or roughly half an
+   hour on a 4-core CPU. You can keep using your computer while it runs.
+
+The build stays on screen when it is done, so you can read the log. Set
 `CARGO_BUILD_JOBS=4` to use fewer cores, or pass `--no-pause` to skip the
 wait. A full log is written to `generated/build.log`.
 
 Next time, run **`./play.sh`**.
 
-Setup does the rest by itself:
+The build does the rest by itself:
 
 - **Disc check:** it checks your disc image.
 - **Build:** it generates the game code from your disc and builds the game.
-- **Launcher (optional):** `./setup.sh --install-launcher` adds a
-  "Ratchet & Clank (rac-rs)" entry to your application menu.
+
+To add a "Ratchet & Clank (rac-rs)" entry to your application menu, run
+**`./install-desktop-launcher.sh`**. It writes one small file to your home
+folder and nothing else, and it works whichever way you built the game.
 
 Your saves are kept in the `player` folder.
 
 **Do not share or upload the generated files or the built game.** They contain
-code generated from the game disc. Everything setup creates stays inside this
-folder.
+code generated from the game disc. Everything the setup creates stays inside
+this folder.
+
+## Cleaning up
+
+Docker is only used to build the game. Nothing about running it needs
+Docker, so once you have it built you can take away everything the build
+left behind.
+
+### Docker
+
+To remove the container, the network and the image the build pulled:
+
+```sh
+cd rac-rs-linux
+sudo docker compose down --rmi all --volumes
+```
+
+The image is 547 MB to download and about 1.5 GB on disk, so it is worth
+taking away. Leave out `--rmi all` if you would rather keep it, so the next
+build does not have to download it again. Your game stays where it is, in
+`build/release/rac-rs`, and keeps working.
+
+If you installed Docker only to build this and want it gone again:
+
+```sh
+sudo pacman -Rns docker docker-compose
+sudo rm -rf /var/lib/docker
+```
+
+The second command deletes everything Docker has on your machine, not just
+this project: other images, other containers and other volumes go with it.
+Remove it only when you are sure. The `docker` group is left behind as
+well; `sudo groupdel docker` takes that away too.
+
+For anything else you have built with Docker, `docker system prune` clears
+out stopped containers, unused networks and dangling images, and
+`docker system prune -a` also removes the images no container is using.
+
+### The build files
+
+The build also leaves the game code it generated from your disc, and the
+compiler's working files, a couple of gigabytes in all. The game does not
+need them to run, so **`./clean.sh`** removes them and keeps what it needs:
+
+```sh
+./clean.sh
+```
+
+It leaves `build/release/rac-rs` and `generated/play.cfg` in place, so the
+game still starts, and it does not touch your disc, your saves or the
+source code. Run `./setup.sh` again and it generates what it needs, if you
+want to build once more.
+
+To do it by hand:
+
+```sh
+rm -rf oracle/rec oracle/game
+rm -f oracle/src/vu0_prog*.rs rac-rs/src/gsfull/vu1_prog*.rs
+rm -f rac-rs/src/gsfull/vu1aot_gen.rs rac-rs/src/particles/orb_tables.rs
+find build -mindepth 1 -maxdepth 1 ! -name release -exec rm -rf {} +
+find build/release -mindepth 1 -maxdepth 1 ! -name rac-rs -exec rm -rf {} +
+find generated -mindepth 1 -maxdepth 1 ! -name play.cfg -exec rm -rf {} +
+```
+
+The last line keeps `generated/play.cfg`, which is where the game looks for
+your disc. Without it the game will not start.
+
+## Portability
+
+The game is a normal Linux program. It runs on any 64-bit Linux that has the
+same C library, or a newer one, than the system it was built on.
+
+*Worth noting, because it decides where the game will run.
+Programs usually link against the C library of the machine it was built on.
+Every new version of that library adds its own version of the functions in
+it, so a program built on a current desktop asks for functions that an older
+system has never heard of. On an older system it then refuses to start,
+with a message about a missing library version.*
+
+The Docker build sidesteps that. Its container is Debian 12, whose C library
+is older than a current desktop's, so the game it produces asks for less and
+runs on more:
+
+| System | C library | The Docker build | A hand build on a current desktop |
+|---|---|---|---|
+| Ubuntu 22.04 | 2.35 | runs | will not start |
+| Debian 12 | 2.36 | runs | will not start |
+| Fedora 37 and newer | 2.37 and up | runs | will not start |
+| SteamOS 3, the Steam Deck | 2.41 | runs | will not start |
+| A current desktop | 2.44 | runs | runs |
+
+A game you build yourself always runs on the machine you built it on. It just
+does not travel.
 
 ## Playing
 
-Run `./play.sh`. The game starts from your disc, the same way the original
-did, logos and all.
+Run `./play.sh`. It is a plain shell script, so there is nothing to install to
+play. The game starts from your disc, the same way the original did, logos and
+all.
 
 ## Updating
 

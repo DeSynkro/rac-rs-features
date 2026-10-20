@@ -9,7 +9,6 @@ set -e
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 icon="$root/rac-rs/assets/icon/rac-rs-256.png"
-template="$root/rac-rs.desktop"
 dest="$HOME/.local/share/applications"
 target="$dest/rac-rs.desktop"
 
@@ -18,19 +17,27 @@ if [ ! -f "$root/build/release/rac-rs" ]; then
 	exit 1
 fi
 
-if [ ! -f "$template" ]; then
-	echo "The launcher template is missing: $template" >&2
-	exit 1
-fi
-
-# The folder name can hold an "&", and sed reads that as "the text that
-# matched". Escape it, or the path comes out wrong.
-esc() { printf '%s' "$1" | sed 's/[&|]/\\&/g'; }
-
 mkdir -p "$dest"
-sed -e "s|__RACRS_DIR__|$(esc "$root")|g" \
-    -e "s|__RACRS_ICON__|$(esc "$icon")|g" \
-    "$template" >"$target"
+
+# The two paths go in as arguments to printf, never as text the shell reads,
+# so a folder name with a space, an & or a $ in it cannot break this.
+{
+	printf '[Desktop Entry]\n'
+	printf 'Type=Application\n'
+	printf 'Name=Ratchet & Clank (rac-rs)\n'
+	printf 'GenericName=Ratchet & Clank\n'
+	printf 'Comment=Play Ratchet & Clank on Linux, from your own disc\n'
+	printf 'Exec="%s/build/release/rac-rs"\n' "$root"
+	printf 'Path=%s\n' "$root"
+	printf 'Terminal=false\n'
+	printf 'Categories=Game;\n'
+	printf 'Keywords=Ratchet;Clank;\n'
+	printf 'Icon=%s\n' "$icon"
+} >"$target"
+
+if command -v desktop-file-validate >/dev/null 2>&1; then
+	desktop-file-validate "$target" || true
+fi
 
 echo "Added a menu entry: $target"
 echo "To remove it again: rm '$target'"

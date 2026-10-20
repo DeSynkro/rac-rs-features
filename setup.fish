@@ -14,8 +14,9 @@
 #   (e)  write generated/play.cfg, so ./build/release/rac-rs can start on its own
 #
 # Everything it writes stays inside this folder: oracle/rec, oracle/game, the generated .rs
-# files named by .gitignore, generated/, build/, and player/ once you play. The only thing it
-# can write outside is the application menu entry, and only with --install-launcher.
+# files named by .gitignore, generated/, build/, and player/ once you play. It writes nothing
+# outside this folder at all. The application menu entry is a separate script,
+# ./install-desktop-launcher.sh, so that it stays that way.
 #
 # Usage:
 #   ./setup.fish                       # the disc in the rom folder, or the one from the last run
@@ -31,7 +32,6 @@
 #   --no-build     stop after (c2)
 #   --no-pause     do not wait for a key at the end (the default waits, so a run
 #                  started from a file manager keeps its window open)
-#   --install-launcher  add rac-rs.desktop to the application menu
 #   -h, --help     this text
 #
 # The environment:
@@ -58,7 +58,6 @@ set -l check_only 0
 set -l regenerate 0
 set -l no_build 0
 set -l no_pause 0
-set -l install_launcher 0
 
 set -l args $argv
 while test (count $args) -gt 0
@@ -85,9 +84,6 @@ while test (count $args) -gt 0
             set -e args[1]
         case --no-pause
             set no_pause 1
-            set -e args[1]
-        case --install-launcher
-            set install_launcher 1
             set -e args[1]
         case -h --help
             set -l self (status filename)
@@ -413,7 +409,7 @@ printf '%s\n' $build_version >$gen/built_version.txt
 
 # ---------------------------------------------------------------- (e) play
 # generated/play.cfg: key=value, UTF-8, LF. The game, started with no arguments, reads it to
-# find the disc image; it then sets the environment itself, so play.fish needs no arguments.
+# find the disc image; it then sets the environment itself, so play.sh needs no arguments.
 # The disc path is relative to this folder when the disc is inside it, so the whole folder can
 # be moved (or copied to another machine) and still find the disc. The path is used as it was
 # given, not resolved, so a linked disc stays a link.
@@ -427,26 +423,7 @@ printf '  wrote generated/play.cfg\n'
 
 Step 'done'
 printf 'To play:  ./play.sh\n'
-
-# ---------------------------------------------------------------- launcher (optional)
-# The application menu entry. It is only installed when asked for, so nothing outside this
-# folder is touched otherwise.
-if test $install_launcher -eq 1
-    set -l destdir "$HOME/.local/share/applications"
-    if mkdir -p $destdir
-        # The shipped rac-rs.desktop is a template: the folder and the icon have to be absolute
-        # paths, and the folder is only known here.
-        set -l icon $root/rac-rs/assets/icon/rac-rs-256.png
-        set -l body (cat rac-rs.desktop | string replace -a '__RACRS_DIR__' $root | string replace -a '__RACRS_ICON__' $icon)
-        if printf '%s\n' $body >$destdir/rac-rs.desktop
-            printf '  installed the launcher in %s\n' $destdir
-        else
-            printf '  could not install the launcher in %s (you can copy rac-rs.desktop there yourself)\n' $destdir >&2
-        end
-    else
-        printf '  could not create %s, so the launcher was not installed\n' $destdir >&2
-    end
-end
+printf 'For a menu entry:  ./install-desktop-launcher.sh\n'
 
 # ---------------------------------------------------------------- pause
 # Started from a file manager, the window would close at once and the log would be gone

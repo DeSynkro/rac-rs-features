@@ -1,9 +1,10 @@
 #!/bin/sh
-# rac-rs's play script is written in fish; this wrapper runs it.
-# See the README for the requirements: fish, Rust, Python, a C compiler, pkg-config, the ALSA and libudev headers.
+# play.sh - starts Ratchet & Clank (rac-rs) from your disc image.
+# The game reads generated/play.cfg itself (the disc path, the save folder, the
+# language), so there are no arguments to pass. Run setup.sh first.
+#
+# Plain shell on purpose: the game needs nothing from your system, and fish is
+# only needed to build it.
 d=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
-if ! command -v fish >/dev/null 2>&1; then
-	echo "fish is not installed. On Arch: sudo pacman -S fish   (see the README for the other packages)" >&2
-	exit 1
-fi
-exec fish "$d/play.fish" "$@"
+cd "$d" || exit 1
+exec "$d/build/release/rac-rs" "$@"

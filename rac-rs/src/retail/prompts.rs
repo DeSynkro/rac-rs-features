@@ -35,7 +35,7 @@ use ee_oracle::rec::Hand;
 use ee_oracle::mem::Mem;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use winit::keyboard::KeyCode;
@@ -47,6 +47,9 @@ static HOST: AtomicU8 = AtomicU8::new(KB);
 static FIELD: AtomicU8 = AtomicU8::new(KB);
 /// A retail page menu is open (set by the worker after each field): Circle is then the right mouse button (back).
 static MENU: AtomicBool = AtomicBool::new(false);
+/// The gamepad's own button bits (the PS2 bits, after `map_xinput`), for the paths that need the pad alone and not the
+/// keyboard's bits mixed in: the movie and scene skips (retail.rs) look for the Start bit here.
+static PAD_BUTTONS: AtomicU16 = AtomicU16::new(0);
 
 /// Reserved RAM for the substituted strings (see decomp/notes/button_prompts.md for the proof that retail never writes it):
 /// `SLOTS` slots of `SLOT` bytes.
@@ -437,7 +440,7 @@ pub fn note_window_event(e: &winit::event::WindowEvent) {
 
 /// Start of the run (Retail::load): says which pad is there (the device stays the keyboard until the pad is used).
 pub fn init() {
-	if super::pcext::enabled() && (xinput::connected() | super::pspad::connected()) {
+	if super::pcext::enabled() && (xinput::connected() | super::pspad::connected() | super::lxpad::connected()) {
 		eprintln!("retail: prompts: gamepad found, keyboard prompts until it is used");
 	}
 }
@@ -728,27 +731,37 @@ pub fn pad_activity(prev: &PadState, now: &PadState) -> bool {
 	now.buttons & !prev.buttons != 0 || (0..4).any(|i| now.sticks[i] != 0x80 && (prev.sticks[i] == 0x80 || (now.sticks[i] as i32 - prev.sticks[i] as i32).abs() > 24))
 }
 
-/// Every connected pad as one: the XInput controller and the PlayStation controller (pspad.rs), merged as `merge` does; also
-/// the physical buttons pressed on either (`binds::PHYS` masks, for the Controls page's "press a button").
+/// Every connected pad as one: the XInput controller, the PlayStation controller (pspad.rs) and the Linux gamepad
+/// (lxpad.rs), merged as `merge` does; also the physical buttons pressed on any of them (`binds::PHYS` masks, for the
+/// Controls page's "press a button").
 fn pad_read() -> Option<(PadState, u32)> {
-	let (xr, pr) = (xinput::raw(), super::pspad::state());
-	if xr.is_none() && pr.is_none() {
+	let (xr, pr, lr) = (xinput::raw(), super::pspad::state(), super::lxpad::state());
+	if xr.is_none() && pr.is_none() && lr.is_none() {
 		return None;
 	}
-	let phys = xr.as_ref().map_or(0, phys_mask) | pr.as_ref().map_or(0, phys_mask);
-	let (x, p) = (xr.map(|r| map_xinput(&r)), pr.map(|r| map_xinput(&r)));
-	let state = match (x, p) {
-		(Some(x), Some(p)) => {
-			let (buttons, sticks) = merge((x.buttons, x.sticks), &p);
-			PadState { buttons, sticks }
-		}
-		(x, p) => x.or(p)?,
-	};
-	Some((state, phys))
+	let phys = xr.as_ref().map_or(0, phys_mask) | pr.as_ref().map_or(0, phys_mask) | lr.as_ref().map_or(0, phys_mask);
+	let (x, p, l) = (xr.map(|r| map_xinput(&r)), pr.map(|r| map_xinput(&r)), lr.map(|r| map_xinput(&r)));
+	let mut state: Option<PadState> = None;
+	for s in [x, p, l].into_iter().flatten() {
+		state = Some(match state {
+			Some(o) => {
+				let (buttons, sticks) = merge((o.buttons, o.sticks), &s);
+				PadState { buttons, sticks }
+			}
+			None => s,
+		});
+	}
+	Some((state?, phys))
 }
 
 fn pad_state() -> Option<PadState> {
 	pad_read().map(|(p, _)| p)
+}
+
+/// The gamepad's own button bits (the PS2 bits): the paths that need the pad alone, not the keyboard's bits mixed in, ask
+/// for the Start bit here.
+pub fn pad_buttons() -> u16 {
+	PAD_BUTTONS.load(Ordering::Relaxed)
 }
 
 /// The physical buttons of `pad_read` at the last two `poll_pad` calls (one per field).
@@ -777,7 +790,11 @@ pub fn poll_pad(buttons: &mut u16, sticks: &mut [u8; 4]) {
 	let pr = pad_read();
 	PHYS_PREV.store(PHYS_NOW.load(Ordering::Relaxed), Ordering::Relaxed);
 	PHYS_NOW.store(pr.map_or(0, |r| r.1), Ordering::Relaxed);
-	let Some((mut p, _)) = pr else { return };
+	let Some((mut p, _)) = pr else {
+		// No pad: the skip paths must not see a Start that is no longer there.
+		PAD_BUTTONS.store(0, Ordering::Relaxed);
+		return;
+	};
 	static PREV: Mutex<PadState> = Mutex::new(PadState::IDLE);
 	if let Ok(mut prev) = PREV.lock() {
 		if pad_activity(&prev, &p) {
@@ -791,6 +808,8 @@ pub fn poll_pad(buttons: &mut u16, sticks: &mut [u8; 4]) {
 	if super::modcam::on() {
 		p.buttons &= !2;
 	}
+	// The gamepad's own buttons, for the skip paths (`pad_buttons`).
+	PAD_BUTTONS.store(p.buttons, Ordering::Relaxed);
 	(*buttons, *sticks) = merge((*buttons, *sticks), &p);
 }
 

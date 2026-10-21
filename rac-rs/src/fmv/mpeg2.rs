@@ -4,7 +4,6 @@
 //! alternate scan, intra VLC format, q_scale_type, concealment vectors (parsed), quant matrices.
 //! Dual-prime vectors are parsed but predicted as plain field vectors.
 //! Frames come out in display order (I/P frames are held back until the next reference).
-#![allow(dead_code)]
 
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -30,6 +29,7 @@ pub struct Frame {
 }
 
 impl Frame {
+	#[cfg(test)]
 	pub fn chroma_width(&self) -> usize {
 		(self.width as usize).div_ceil(2)
 	}
@@ -1334,7 +1334,6 @@ mod tests {
 		println!("{} frames in {dt:.2}s = {:.1} fps, errors {}", frames.len(), frames.len() as f64 / dt, dec.errors);
 		assert!(frames.len() >= 100);
 		let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/target/test_out");
-		std::fs::create_dir_all(dir).unwrap();
 		for n in [0, 12, 50, 99] {
 			let f = &frames[n];
 			println!("frame {n}: {}x{} type {} struct {} tff {} prog {} pts {:?}", f.width, f.height, f.coding_type, f.picture_structure, f.top_field_first, f.progressive, f.pts);

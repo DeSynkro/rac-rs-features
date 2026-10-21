@@ -1,73 +1,31 @@
 # Changelog
 
-## Linux fork
+## v0.3.0
 
-This fork carries rac-rs v0.2.2 over to Linux. The game itself is unchanged: it is
-still the original PS2 code, recompiled from your own disc and run on a PS2 CPU
-core written in Rust. What is new here is the platform and the extras.
-
-### Added
-
-- **A Docker build.** `sudo docker compose up` builds the game in a container
-  that already has everything it needs, so nothing has to be installed on your
-  machine. The container has an older C library than a current desktop, so the
-  game it builds also runs on older systems, a Steam Deck included.
-- **An `install-desktop-launcher.sh` script** adds a "Ratchet & Clank
-  (rac-rs)" entry to your application menu. It writes one small file to your
-  home folder and nothing else, and it works whichever way you built the game.
-- **A `clean.sh` script** removes what the build left behind: the game code
-  generated from your disc and the compiler's working files, a couple of
-  gigabytes in all. It keeps the game and your disc path, so the game still
-  starts.
-- **A native Linux build.** `setup.sh` and `play.sh` replace the Windows
-  `Setup.cmd` and `setup.ps1`. Your system Rust and Python are used as they
-  are, so the 1.2 GB private toolchain download does not happen.
-- **Gamepad support.** Xbox-style and PlayStation controllers are read as
-  evdev devices, with full analog sticks and triggers. A controller connected
-  while the game is running is picked up without a restart.
-- **Xbox button glyphs.** The button prompts can name the buttons the way an
-  Xbox pad does (`A` `B` `X` `Y` `LB` `RB` `LT` `RT` `R3` `L3`) instead of
-  drawing the PlayStation shapes. It is an option in the Graphics page, and
-  Xbox is the default here.
-- **Prompts that follow your hands.** The prompts show the key names with
-  mouse and keyboard, and the button names with a controller, switching by
-  themselves as you use each.
-- **A third camera style, "Enhanced".** L2 aims, like the modern camera's R2,
-  and R2 fires the weapon like the Circle button. The camera row offers
-  Classic, Modern and Enhanced.
-- **The controller skips cutscenes.** Start skips, like Spacebar does. The
-  Insomniac intro at the start of the game can be skipped too.
-- **A `rom` folder.** Drop your disc image in it and the setup finds it. With
-  more than one image the setup asks which to use.
-- **A build log** in `generated/build.log`, and the build is `nice`d so your
-  desktop stays usable while it runs.
-- **The unit tests work from a fresh checkout.** They make the folder they
-  write their images to, and the README says how to point them at your
-  disc. Only `retail::memcard` still fails: it wants a savestate from the
-  upstream project's own test data, which is not in a public checkout.
-
-### Changed
-
-- **"Reversed" in the camera options now applies to the right stick only.**
-  The mouse keeps its own direction.
-- **The setup waits for a key at the end**, so a run started from a file
-  manager keeps its window open. `--no-pause` skips the wait.
-- **`play.sh` no longer needs fish.** It is plain shell now, so you can start
-  the game without installing anything.
-- **Nothing needs fish any more.** The setup script is plain POSIX shell, so it
-  runs under whatever `/bin/sh` is on your system, and fish is not in the list
-  of things to install.
-- **A crash log on Linux too.** Panics and errors are written to
-  `player/crash.log`, the same place the Windows build puts them, so there is
-  a record of a failure even when the game was started from the application
-  menu with no terminal there to read.
-- **`--install-launcher` is now `install-desktop-launcher.sh`.** The flag is
-  gone. The script does the same job, and it also works after a Docker build.
-
-### Removed
-
-- The Windows installer (`Setup.cmd`, `setup.ps1`) and the automatic updater.
-  They are in the upstream repository, not here.
+- This update rebuilds the whole game once, so it takes longer than usual: about 10 minutes, up to 20 on slower PCs. Your saves and settings are kept.
+- Graphics page (Pause > Options > Graphics) now has three pages: Picture, Effects and Screen. Left / Right on the Page row flips between them. The same page is on the title screen under Options > Graphics.
+  - Quality levels Off / Low / Medium / High for ambient occlusion, shadows, water, particles and sun rays. High looks like v0.2; lower levels run faster on slower PCs.
+  - New: Global illumination (Off / Low / Medium / High). Light bounces off walls and the ground and softly tints nearby surfaces.
+  - New: Waves (On / Off). The sea on Pokitaru, Novalis, Rilgar and Batalia now rolls in waves, calm near the shore and around Ratchet.
+  - New: Vegetation (Off / Moderate / Lush): tall grass and flowers on grassy ground.
+  - New: Draw distance (Low like the PS2 / Medium / High) and Culling (Off draws everything, for testing; slower).
+  - New: Frame smoothing (On by default). On monitors faster than 50 or 60 Hz the game draws in-between pictures, so motion looks smooth. The game itself still runs at its original speed.
+  - New: HUD Sharp / Original. Sharp draws the on-screen text and icons, the shop screen and the title menu at your screen's resolution (windows 896 pixels tall or more). Original keeps the PS2 look.
+- Water: light patterns on the sea floor and light shafts underwater, reflections of the scenery in pools and the sea, no more flicker or holes at the Pokitaru waterfalls, and no more flickering dark shapes or bands on Rilgar's sea.
+- Sun shadows: one sun per planet, and shadows are no longer cut into pieces.
+- The pause menus now show their 3D models again: Ratchet and the selected weapon with its ammo on the Weapons page, Ratchet on the Gadgets page, the weapon on Quick Select and the gold bolt on Items.
+- Camera: a new Camera row (Pause > Options > Camera Options) with Classic, Static and Smooth. Smooth is the new default: it follows softly, recentres lazily while you run, looks down at drops and pulls in at walls. Static is the modern camera from v0.2. The modern camera no longer goes inside the level when Ratchet jumps up big steps.
+- Camera Options also has a camera speed setting (10 to 200) and Lock-on (Auto / On / Off): while strafe-aiming with the right mouse button, a red circle locks on to the nearest enemy.
+- Controls: every button can now be changed (Pause > Options > Controls), for the keyboard and for controllers. The menus show your keys instead of PlayStation buttons.
+- Debug mode (Pause > Options > Controls, last page, off by default): F1 planet list and travel, F2 free camera, F3 draw distance, F5 cannot die, F6 infinite ammo, F8 +10,000 bolts. Travelling can skip story progress, so save first.
+- Clank now stays on Ratchet's back during Thruster-Pack flight, and both legs move when Ratchet walks backwards while strafing.
+- Widescreen: the right edge of the picture now fades with the cutscene fades and takes the underwater colour like the rest.
+- PAL: the game's own 60 Hz option (title Options > Video) now really runs the game at 60 steps a second.
+- Faster Load Game (also after Quit Game), a plain black screen while a level loads, and New Game on a used save slot now asks before overwriting it.
+- Sound: no more pop at the end of every movie, and no more crackle on busy or slower PCs.
+- Speed: the graphics card now does more of the work (character skinning, culling, frame smoothing), big fights no longer hitch, and there is no more slowdown after many planet trips. The USA pause menus are much faster.
+- Setup now compiles the game with a speed profile (profile-guided optimisation) made for your disc, Europe or USA: the game logic needs about 8-13% less CPU time. It plays exactly the same.
+- USA disc: everything above works on the USA disc too.
 
 ## v0.2.2
 

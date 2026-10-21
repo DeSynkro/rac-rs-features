@@ -234,7 +234,7 @@ command -v python3 >/dev/null 2>&1 || Fail 'python3 not found (the generators ne
 
 # The generator flags, as in setup.ps1. --shared-slow writes the memory-access slow paths
 # as shared helpers instead of inlining them.
-gen_flags='--no-comments --compact --shared-slow --outline-mem'
+gen_flags='--no-comments --compact --shared-slow --outline-mem --direct-mem --skin-ff --vu-guard'
 
 # ---------------------------------------------------------------- (b) disc image
 Step '(b) disc image'
@@ -303,7 +303,7 @@ WaitExit() {
 Step '(c) generating game code from the disc image'
 orc=oracle
 stamp=$gen/done.txt
-gen_files='tools/recgen_iso.py tools/fn_bounds.tsv oracle/stubs.txt'
+gen_files='tools/recgen_iso.py tools/share_iso.py tools/fn_bounds.tsv oracle/stubs.txt'
 if [ "$sha1" = AEE9275384F739C9B24CD5DE6F7E200292DB7B01 ]; then
     gen_files="$gen_files tools/fn_bounds_usa.tsv"
 fi
@@ -323,6 +323,13 @@ if [ "$regenerate" -eq 1 ] || [ "$have" != "$want" ]; then
     rm -f "$stamp"
     rm -rf "$gen/logs"
     mkdir -p "$gen/logs"
+    # Upstream's sharing pass, step one of three. share_iso.py groups the functions that every
+    # level repeats into shared crates (rec/sh_NN), and each copy becomes a one-line wrapper.
+    # This first step records the content and time of every generated file, before the levels
+    # are generated, so the last step can put the times back and cargo rebuilds only what
+    # really changed.
+    python3 tools/share_iso.py --rec "$orc/rec" --snapshot "$gen/logs/gen_files_before.txt"
+    [ $? -eq 0 ] || Fail 'listing the generated files failed (tools/share_iso.py --snapshot)'
     # Levels 0..18, --jobs of them at a time. The levels are started in order and reaped in
     # order, so the oldest running one is always the one to reap: two counters are enough
     # for the queue, and no list is needed.
@@ -370,6 +377,15 @@ if [ "$regenerate" -eq 1 ] || [ "$have" != "$want" ]; then
     # The parallel generators race on game/src/lib.rs: rewrite it once from what is on disk.
     python3 tools/recgen_iso.py --facade-only --out "$orc" --oracle "$orc"
     [ $? -eq 0 ] || Fail 'facade rewrite failed'
+    # The sharing pass itself: the shared crates appear and every level crate holds wrappers.
+    python3 tools/share_iso.py --rec "$orc/rec"
+    [ $? -eq 0 ] || Fail 'sharing pass failed (tools/share_iso.py)'
+    # The pass rewrote the crates, so the facade is rewritten again to match.
+    python3 tools/recgen_iso.py --facade-only --out "$orc" --oracle "$orc"
+    [ $? -eq 0 ] || Fail 'facade rewrite failed'
+    # And the file times go back, so cargo does not rebuild every crate after a regeneration.
+    python3 tools/share_iso.py --rec "$orc/rec" --keep-times "$gen/logs/gen_files_before.txt"
+    [ $? -eq 0 ] || Fail 'restoring file times failed (tools/share_iso.py --keep-times)'
     # Every crate must be in the facade (the concurrent generators rewrite it).
     n_crates=$(find "$orc/rec" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
     n_reg=$(grep -c '::FNS)' "$orc/game/src/lib.rs")
@@ -385,7 +401,7 @@ fi
 # and translated to Rust. None of that is shipped. (Same as setup.ps1 step c2.)
 Step '(c2) generating the VU microcode translations from the disc image'
 vu_stamp=$gen/vu_done.txt
-vu_files='tools/vugen_iso.py tools/vu/vu0gen.py tools/vu/vu1gen.py tools/vu/vu_disasm.py tools/vu/profile.txt'
+vu_files='tools/vugen_iso.py tools/skinff_ee.py tools/skinff_gen.py tools/vu/profile.txt tools/vu/vu0gen.py tools/vu/vu1gen.py tools/vu/vu_disasm.py tools/vu/vuclean.py tools/vu/vudec.py tools/vu/vugraph.py'
 vu_want="$sha1 vu1 gen=$(Stamp $vu_files)"
 vu_have=''
 if [ -f "$vu_stamp" ]; then vu_have=$(trim "$(cat "$vu_stamp")"); fi
@@ -431,7 +447,7 @@ done
 # The exit status of cargo is captured inside the braces, because a pipeline's status is
 # the last command's (tee), which would hide a failed build.
 { nice -n 10 cargo build --release --manifest-path rac-rs/Cargo.toml --target-dir build \
-    --bin rac-rs --config "$prof" 2>&1; echo $? >"$gen/.build_rc"; } | tee "$gen/build.log"
+    -p rac-rs-exe --bin rac-rs --config "$prof" 2>&1; echo $? >"$gen/.build_rc"; } | tee "$gen/build.log"
 build_rc=$(cat "$gen/.build_rc")
 rm -f "$gen/.build_rc"
 exe=build/release/rac-rs

@@ -1,9 +1,8 @@
-﻿//! rac-rs: a from-scratch Rust reimplementation of Ratchet & Clank (PS2) that runs on the user's own
-//! disc image. This first layer reads the disc the way the game does: by sector, through the table
-//! of contents, with Insomniac's WAD decompression.
-
-// Public build (cargo feature `windows_gui`, set by setup.ps1): no console window next to the game. Dev builds and test tools keep theirs.
-#![cfg_attr(all(windows, feature = "windows_gui"), windows_subsystem = "windows")]
+﻿// rac-rs: a from-scratch Rust reimplementation of Ratchet & Clank (PS2) that runs on the user's own
+// disc image. This first layer reads the disc the way the game does: by sector, through the table
+// of contents, with Insomniac's WAD decompression.
+// This file is the root of the library crate rac_game (src/lib.rs includes it); the exe is exe/src/main.rs, which
+// sets the no-console subsystem (feature `windows_gui`) and calls `main` below.
 
 mod ambience;
 mod anim;
@@ -13,12 +12,12 @@ mod bytes;
 mod camera;
 mod camgrid;
 mod collision;
+mod devtune;
 mod dynlight;
 mod flow;
 mod fmv;
 mod game;
 mod frontend;
-#[allow(dead_code)]
 mod gsfull;
 mod gadgets;
 mod gameplay;
@@ -30,7 +29,6 @@ mod level;
 mod loadlog;
 mod map;
 mod mesh;
-mod missions;
 mod mobies;
 mod particles;
 mod music;
@@ -72,17 +70,14 @@ const USAGE: &str = "usage:
   rac-rs ties   <disc.iso> <level|all>          decode tie (prop) classes and placements
   rac-rs scan  <disc.iso>                    decompress every sector-aligned WAD blob
   rac-rs verify <disc.iso> <file>...           check Wrench-extracted files appear in decompressed blobs
-  rac-rs dump   <disc.iso> <sector> <out>      decompress the WAD starting at <sector> into <out>";
+  rac-rs dump   <disc.iso> <sector> <out>      decompress the WAD starting at <sector> into <out>
+  rac-rs warm-gpu                              build the GPU capture's kernels once (the driver keeps them), then exit";
 
-/// Panics and the final error are appended to `<player dir>/crash.log`. The game may have been started from the
-/// application menu, with no terminal there to read, so the log is the record of what went wrong.
+/// Without a console (feature `windows_gui`) stderr goes nowhere, so panics and the final error are appended to `<player dir>/crash.log`.
+#[cfg(feature = "windows_gui")]
 fn crash_log(text: &str) {
 	use std::io::Write;
-	// The player folder, the same one the saves go in. The game only points RAC_PLAYER_DIR at it once it
-	// starts, so a failure before that is exactly the one worth recording, and the folder is found from the
-	// exe instead. Without an install root there is no game folder to speak of, and the fallback is the
-	// source tree the game was built from.
-	let dir = install_root().map(|r| r.join("player")).unwrap_or_else(|_| retail::memcard::player_dir());
+	let dir = retail::memcard::player_dir();
 	let _ = std::fs::create_dir_all(&dir);
 	let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
 	if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("crash.log")) {
@@ -108,15 +103,15 @@ fn message_box(text: &str) {
 
 /// The install root: the first folder from the exe's folder upwards that holds `generated/play.cfg`. Err is the text for a message box.
 fn install_root() -> Result<std::path::PathBuf, String> {
-	let exe = std::env::current_exe().map_err(|e| format!("Cannot find the game folder ({e}). Run setup.sh first."))?;
+	let exe = std::env::current_exe().map_err(|e| format!("Cannot find the game folder ({e}). Run Setup.cmd first."))?;
 	exe.parent()
 		.and_then(|d| d.ancestors().find(|d| d.join("generated").join("play.cfg").is_file()))
 		.map(|d| d.to_path_buf())
-		.ok_or_else(|| "Run setup.sh first: the game has not been set up yet (generated/play.cfg not found).".to_string())
+		.ok_or_else(|| "Run Setup.cmd first: the game has not been set up yet (generated/play.cfg not found).".to_string())
 }
 
-/// [PC] The window title: "rac-rs v0.2.1" from the install root's `generated/built_version.txt` (the setup script writes it after
-/// building this exe, so an update whose files arrived but whose build has not finished still shows the old version), else its VERSION file
+/// [PC] The window title: "rac-rs v0.2.1" from the install root's `generated/built_version.txt` (setup.ps1 writes it after building
+/// this exe, so an update whose files arrived but whose build has not finished still shows the old version), else its VERSION file
 /// (the release the player downloaded), else "rac-rs" (dev and test runs outside an install).
 pub fn app_name() -> &'static str {
 	static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -191,7 +186,7 @@ fn update_check() -> bool {
 /// Runs first thing in `main`, before any thread starts (`set_var` is only sound then).
 fn launch_args() -> Result<Vec<String>, String> {
 	let root = install_root()?;
-	let cfg = std::fs::read(root.join("generated").join("play.cfg")).map_err(|e| format!("Cannot read generated/play.cfg ({e}). Run setup.sh again."))?;
+	let cfg = std::fs::read(root.join("generated").join("play.cfg")).map_err(|e| format!("Cannot read generated/play.cfg ({e}). Run Setup.cmd again."))?;
 	let cfg = String::from_utf8_lossy(&cfg);
 	let (mut iso, mut lang) = (None, None);
 	for line in cfg.trim_start_matches('\u{feff}').lines() {
@@ -203,23 +198,16 @@ fn launch_args() -> Result<Vec<String>, String> {
 			}
 		}
 	}
-	let iso = iso.filter(|i| !i.is_empty()).ok_or("Run setup.sh again: generated/play.cfg has no disc image path.")?;
-	// A relative path in the config is relative to the install root, so the folder can be moved (or copied to another
-	// machine) with the disc inside it and still find it.
-	let iso_path = std::path::Path::new(&iso);
-	let iso_path = if iso_path.is_absolute() { iso_path.to_path_buf() } else { root.join(iso_path) };
-	if !iso_path.is_file() {
-		return Err(format!("Your disc image moved or is gone:\n{}\n\nRun setup.sh again.", iso_path.display()));
+	let iso = iso.filter(|i| !i.is_empty()).ok_or("Run Setup.cmd again: generated/play.cfg has no disc image path.")?;
+	if !std::path::Path::new(&iso).is_file() {
+		return Err(format!("Your disc image moved or is gone:\n{iso}\n\nRun Setup.cmd again."));
 	}
-	let iso = iso_path.to_string_lossy().into_owned();
 	let player = root.join("player");
 	let _ = std::fs::create_dir_all(&player);
-	let skip = std::fs::read_to_string(root.join("oracle").join("hand").join("hand_skip.txt")).map(|t| t.lines().next().unwrap_or("").trim().to_string()).unwrap_or_default();
 	// SAFETY: still single-threaded (called first in main, after the load-log clock which starts no thread).
 	unsafe {
 		std::env::set_var("ORACLE_ISO", &iso);
 		std::env::set_var("ORACLE_STUBS", root.join("oracle").join("stubs.txt"));
-		std::env::set_var("ORACLE_HAND_SKIP", skip);
 		std::env::set_var("RAC_PLAYER_DIR", &player);
 		if std::env::var_os("COLD_LANG").is_none() {
 			let lang = lang.filter(|l| ["en", "fr", "de", "es", "it"].contains(&l.as_str())).unwrap_or_else(|| "en".to_string());
@@ -237,15 +225,12 @@ fn launch_args() -> Result<Vec<String>, String> {
 	Ok(["view", iso.as_str(), "0", "--retail-cold", "--modern-cam"].map(String::from).to_vec())
 }
 
-fn main() -> ExitCode {
+pub fn main() -> ExitCode {
 	loadlog::init();
-	// The panic goes to the terminal as usual, and to the crash log as well, so there is a record of it even when the
-	// game was started from the application menu and there was no terminal there to read.
-	let prev_hook = std::panic::take_hook();
-	std::panic::set_hook(Box::new(move |info| {
+	#[cfg(feature = "windows_gui")]
+	std::panic::set_hook(Box::new(|info| {
 		let thread = std::thread::current();
 		crash_log(&format!("panic in thread {}: {info}", thread.name().unwrap_or("?")));
-		prev_hook(info);
 	}));
 	let mut args: Vec<String> = std::env::args().skip(1).collect();
 	// Started by the player: double-clicked (no arguments: the desktop shortcut, Setup's Play) or by Play.cmd (the same cold boot with
@@ -259,7 +244,6 @@ fn main() -> ExitCode {
 		match launch_args() {
 			Ok(a) => args = a,
 			Err(msg) => {
-				crash_log(&msg);
 				message_box(&msg);
 				return ExitCode::from(2);
 			}
@@ -273,6 +257,7 @@ fn main() -> ExitCode {
 		Some("scan") if args.len() == 2 => cmd_scan(&args[1]).map(|_| ()),
 		Some("verify") if args.len() >= 3 => cmd_verify(&args[1], &args[2..]),
 		Some("dump") if args.len() == 4 => cmd_dump(&args[1], &args[2], &args[3]),
+		Some("warm-gpu") => retail::warm_gpu().map_err(Into::into),
 		_ => {
 			eprintln!("{USAGE}");
 			return ExitCode::from(2);
@@ -282,9 +267,11 @@ fn main() -> ExitCode {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(e) => {
 			eprintln!("error: {e}");
-			crash_log(&format!("error: {e}"));
 			#[cfg(feature = "windows_gui")]
-			message_box(&format!("The game stopped: {e}\n\nDetails are in player/crash.log."));
+			{
+				crash_log(&format!("error: {e}"));
+				message_box(&format!("The game stopped: {e}\n\nDetails are in player/crash.log."));
+			}
 			ExitCode::FAILURE
 		}
 	}

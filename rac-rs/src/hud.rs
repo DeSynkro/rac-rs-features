@@ -292,7 +292,6 @@ mod tests {
 			assert_eq!(fonts.len(), 3);
 			if info.id == 0 {
 				for (i, f) in fonts.iter().enumerate() {
-					std::fs::create_dir_all(OUT).unwrap();
 					std::fs::write(format!("{OUT}/font{}.png", i + 1), png(&flat(&f.tex))).unwrap();
 				}
 			}

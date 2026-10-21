@@ -41,6 +41,7 @@ find build/release -mindepth 1 -maxdepth 1 ! -name rac-rs -exec rm -rf {} +
 echo "  removing the game code generated from your disc"
 rm -rf oracle/rec oracle/game
 rm -f oracle/src/vu0_prog0.rs oracle/src/vu0_prog1.rs oracle/src/vu0_prog9hi.rs
+rm -f oracle/src/skinff_ee.rs oracle/src/skinff_vu.rs
 rm -f rac-rs/src/gsfull/vu1_prog*.rs rac-rs/src/gsfull/vu1aot_gen.rs
 rm -f rac-rs/src/particles/orb_tables.rs
 

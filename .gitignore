@@ -1,6 +1,7 @@
 # The rom folder ships (with its README and .gitkeep) but never the disc image in it: *.iso below covers that.
 /generated/
 /build/
+/target/
 /player/
 /toolchain/
 /Play.cmd

@@ -173,6 +173,12 @@ pub fn warm_gpu() -> Result<(), String> {
 	if gscap::gpu_warm() { Ok(()) } else { Err("no GPU for the capture".into()) }
 }
 
+/// The window's GPU (viewer/gpu.rs, before the game loads): the GS capture uses a GPU of its own by default only when that one
+/// is NVIDIA (gscap draw/gpu.rs `set_default`).
+pub fn gpu_capture_default(nvidia: bool) {
+	gscap::gpu_default(nvidia);
+}
+
 pub fn active() -> bool {
 	STATE.get().is_some()
 }

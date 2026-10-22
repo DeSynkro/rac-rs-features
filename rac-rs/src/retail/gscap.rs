@@ -255,6 +255,8 @@ pub struct Gs {
     font_at: Option<(u32, u32, u32, u32, usize)>,
     /// The button glyphs style the sheet was last patched with.
     font_style: u8,
+    /// The button bindings the sheet was last patched with (a rebound function is shown as the button it was bound to).
+    font_map: [u8; crate::retail::binds::NP],
     /// The "the font sheet was found" line was printed (once).
     font_said: bool,
     /// The uploads the debug switch has logged (the first 500).
@@ -406,6 +408,7 @@ impl Gs {
               gpu,
               font_at: None,
               font_style: u8::MAX,
+              font_map: [u8::MAX; crate::retail::binds::NP],
               font_said: false,
               font_log: 0,
               gq: 0,
@@ -1370,9 +1373,11 @@ impl Gs {
           // artwork in it.
           self.font_at = Some((dbp, dbw, dx, dy, which));
           let style = crate::retail::pcext::glyph_style_now().min(2) as usize;
+          let map = crate::retail::binds::pad_map();
           self.font_style = style as u8;
-          let cells = &font.cells[which * 3 + style];
-          Self::patch_cells(p, cells, dx, dy, rw);
+          self.font_map = map;
+          let cells = font.cells_for(which, style, &map);
+          Self::patch_cells(p, &cells, dx, dy, rw);
           crate::retail::xglyphs::set_artwork_in_place(style != 0);
           if !self.font_said {
               self.font_said = true;
@@ -1407,12 +1412,13 @@ impl Gs {
           }
       }
 
-      /// The style changed: the sheet in the graphics memory gets the other artwork. The sheet's place is known
-      /// from its upload (`font_at`).
+      /// The style or the bindings changed: the sheet in the graphics memory gets the other artwork. The sheet's place is
+      /// known from its upload (`font_at`).
       pub fn repatch_font(&mut self) {
           let Some((dbp, dbw, dx, dy, which)) = self.font_at else { return };
           let style = crate::retail::pcext::glyph_style_now().min(2) as usize;
-          if style as u8 == self.font_style {
+          let map = crate::retail::binds::pad_map();
+          if style as u8 == self.font_style && map == self.font_map {
               return;
           }
           let Some(font) = crate::retail::xglyphs::patch() else { return };
@@ -1420,7 +1426,8 @@ impl Gs {
               return;
           }
           self.font_style = style as u8;
-          let cells = &font.cells[which * 3 + style];
+          self.font_map = map;
+          let cells = font.cells_for(which, style, &map);
           // The sheet's texels, read back, with the cells of the style in it (the PlayStation style's cells are the sheet's own).
           let mut sheet = vec![0u8; 256 * 128];
           for y in 0..128u32 {

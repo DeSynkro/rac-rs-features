@@ -155,8 +155,11 @@ pub(super) fn hud_art(l: &Level, disc: &mut iso::Disc) -> (Vec<Texture>, HudArt)
 	match art::font_glyph_tables(disc).and_then(|g| art::level_fonts(l, &g)) {
 		Ok(mut fonts) if !fonts.is_empty() => {
 			let mut f = fonts.remove(0);
-			// The button glyphs style: the Xbox artwork goes into the sheet's ten button cells.
-			crate::retail::xglyphs::blit(&mut f.tex, crate::retail::pcext::glyph_style_now());
+			// The button glyphs style: the Xbox artwork goes into the sheet's ten button cells. The sheet as it was decoded
+			// is kept, so the style can be changed back (the PlayStation style takes the retail's own symbols out of it).
+			a.font_tex_orig = Some(f.tex.clone());
+			let map = crate::retail::binds::pad_map();
+			crate::retail::xglyphs::blit(a.font_tex_orig.as_ref().unwrap(), &mut f.tex, crate::retail::pcext::glyph_style_now(), &map);
 			a.font = Some((1 + tex.len(), f.glyphs));
 			a.font_tex = Some(f.tex.clone());
 			tex.push(f.tex);

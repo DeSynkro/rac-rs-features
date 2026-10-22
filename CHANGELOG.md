@@ -29,7 +29,12 @@ CPU core written in Rust. What is new here is the platform and the extras.
   the green A disc and the rest, the way an Xbox pad labels them, instead of
   the retail's own PlayStation shapes. A third style draws the Nintendo
   Switch's, where the four face buttons are the other way round. The style is a
-  row in the Graphics menu, and Xbox is the default.
+  row in the Graphics menu, and Xbox is the default. Switching back to the
+  PlayStation style puts the retail's own shapes back.
+- **The prompts follow your rebindings.** A button you have bound to another
+  one is shown as the button it is really played with: put the Circle on the RT
+  and the prompts say RT, show the RT's picture, and the RT is what presses it,
+  in the menus as well as in the game.
 - **Prompts that follow your hands.** The prompts show the key names with
   mouse and keyboard, and the button names with a controller, switching by
   themselves as you use each.

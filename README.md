@@ -371,6 +371,10 @@ one is A. Xbox is the default.
 The style is for a controller: with the keyboard the prompts name the buttons
 by key, as they always have.
 
+A button you have rebound is shown as the button it is really played with. If
+you put the Circle on the RT, the prompts say RT and show the RT's picture, and
+the RT is what presses it, in the menus as well as in the game.
+
 | | Classic | Static | Smooth |
 |---|---|---|---|
 | Camera | the original PS2 follow camera | mouse look and strafing | mouse look, softer |

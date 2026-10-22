@@ -583,6 +583,9 @@ impl St {
 /// starts the console in the remembered language (the dev override COLD_LANG wins).
 pub fn init(cold: bool) {
 	if !enabled() {
+		// The extension is off: the options file is not read, so the bindings are the defaults (the file was read before the
+		// threads started, for the prompts' sake).
+		super::binds::init(None, None);
 		return;
 	}
 	let path = pcopts::file();

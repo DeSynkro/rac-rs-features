@@ -57,6 +57,7 @@ impl Gate {
 			return;
 		}
 		let _t = super::profile::span("sgate");
+		let _w = crate::runlog::waiting("the present thread's submit of the last frame (presenter gate)");
 		let mut g = self.lock.lock().unwrap();
 		while self.pending.load(Ordering::Acquire) {
 			g = self.cv.wait(g).unwrap();
@@ -118,6 +119,7 @@ impl Presenter {
 			let h = std::thread::Builder::new()
 				.name("present".into())
 				.spawn(move || {
+					let _release = Release(b.clone(), g.clone());
 					let (mut n, mut ns) = (0u64, 0u64);
 					let mut sub = (0u64, 0u64);
 					while let Ok(job) = rx.recv() {
@@ -157,6 +159,7 @@ impl Presenter {
 	/// Waits until no present is in flight.
 	pub(super) fn flush(&self) {
 		let mut g = self.busy.0.lock().unwrap();
+		let _w = (*g).then(|| crate::runlog::waiting("the present thread's last present (presenter flush)"));
 		while *g {
 			g = self.busy.1.wait(g).unwrap();
 		}
@@ -255,6 +258,7 @@ impl Cuts {
 	/// All command buffers of the frame in order, `last` being the final encoder's.
 	pub(super) fn take(mut self, last: wgpu::CommandBuffer) -> Vec<wgpu::CommandBuffer> {
 		let _t = super::profile::span("fjoin");
+		let _w = crate::runlog::waiting("the frame's parallel command encoders");
 		let mut v: Vec<wgpu::CommandBuffer> = self.parts.drain(..).filter_map(|rx| rx.recv().ok()).collect();
 		v.push(last);
 		v

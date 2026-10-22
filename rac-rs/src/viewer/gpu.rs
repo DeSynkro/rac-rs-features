@@ -458,6 +458,7 @@ impl Gpu {
 			})
 			.collect();
 		gpu.part_tex = Some(gpu.upload_texture(Some(&Texture { w: 64, h: 64, rgba: disc })));
+		crate::loadlog::say(|| "host: gpu ready (pipelines built)".into());
 		gpu
 	}
 
@@ -2539,6 +2540,7 @@ impl Gpu {
 		// The surface holds one acquired image at a time: the previous frame's present (on the present thread) must have returned
 		// before the next acquire, or wgpu panics "Surface image is already acquired" (seen 2026-10-19 on fg1/1_0016, dev s49).
 		self.presenter.flush();
+		let acquire = crate::runlog::waiting("the GPU driver's next window image (vsync / swapchain)");
 		let frame = match self.surface.get_current_texture() {
 			wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
 			wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
@@ -2548,6 +2550,7 @@ impl Gpu {
 			}
 			_ => return None,
 		};
+		drop(acquire);
 		super::profile::lap(super::profile::Phase::Acquire);
 		let view = frame.texture.create_view(&Default::default());
 		let mut enc = self.device.create_command_encoder(&Default::default());

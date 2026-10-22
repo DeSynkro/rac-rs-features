@@ -1,4 +1,5 @@
-//! GS capture on the GPU (on by default; RAC_GSCAP_GPU=0 draws on the CPU, `low` picks the power-saving adapter, other
+//! GS capture on the GPU (on by default on NVIDIA, `set_default`; RAC_GSCAP_GPU=0 draws on the CPU, 1 uses the GPU on any
+//! vendor, `low` picks the power-saving adapter, other
 //! text part of an adapter's name): the pixel work of the capture (prims, transfers, local copies, CLUT loads, the
 //! overlay pictures) runs as compute kernels (gpu.wgsl) on local memory, CLUT and overlay planes that live on the GPU.
 //! The CPU keeps the register model, the deferred uploads and each prim's set-up (the same f32 operations as draw.rs)
@@ -316,6 +317,7 @@ impl Gpu {
                 .name("gs-gpu-open".into())
                 .spawn(move || {
                     idle();
+                    let _w = crate::runlog::waiting("opening the GS capture GPU (device, kernels)");
                     Self::open(&w)
                 })
                 .ok();
@@ -338,7 +340,10 @@ impl Gpu {
                 drop(o);
                 match h {
                     Some(h) => h.join().ok().flatten(),
-                    None => Self::open(&want),
+                    None => {
+                        let _w = crate::runlog::waiting("opening the GS capture GPU (device, kernels)");
+                        Self::open(&want)
+                    }
                 }
             }
         };
@@ -1110,6 +1115,7 @@ impl Gpu {
         *self.st.entry("submit prep us").or_default() += t_prep.elapsed().as_micros() as u64;
         if let (false, Some((_, _, qm))) = (steps.is_empty(), &self.ts) {
             qm.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+            let _w = crate::runlog::waiting("the GS capture GPU's timestamps");
             self.dev.poll(wgpu::PollType::wait_indefinitely()).ok()?;
             let v: Vec<u64> = bytemuck::cast_slice(&qm.slice(..).get_mapped_range().ok()?[..steps.len() * 16]).to_vec();
             qm.unmap();
@@ -1146,7 +1152,9 @@ impl Gpu {
         if let Some((_, _, sl)) = &hdn {
             sl.map_async(wgpu::MapMode::Read, |_| {});
         }
+        let w = crate::runlog::waiting("the GS capture GPU's picture (readback)");
         self.dev.poll(wgpu::PollType::wait_indefinitely()).ok()?;
+        drop(w);
         *self.st.entry("readback wait us").or_default() += t.elapsed().as_micros() as u64;
         let mut v = vec![0u32; PLANE as usize / 4];
         v.copy_from_slice(bytemuck::cast_slice(&self.rb.slice(..).get_mapped_range().ok()?));
@@ -1164,7 +1172,9 @@ impl Gpu {
     fn rb_finish(&mut self, block: bool) -> Option<Vec<u32>> {
         let p = self.rb_pend.as_ref()?;
         let (done, want, hd) = (p.done.clone(), p.want, p.hd);
+        let w = block.then(|| crate::runlog::waiting("the GS capture GPU's picture (lazy readback)"));
         self.dev.poll(if block { wgpu::PollType::wait_indefinitely() } else { wgpu::PollType::Poll }).ok();
+        drop(w);
         if done.load(std::sync::atomic::Ordering::SeqCst) < want {
             return None;
         }

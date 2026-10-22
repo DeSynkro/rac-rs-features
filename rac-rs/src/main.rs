@@ -27,6 +27,7 @@ mod inventory;
 mod iso;
 mod level;
 mod loadlog;
+mod runlog;
 mod map;
 mod mesh;
 mod mobies;
@@ -212,11 +213,30 @@ fn launch_args() -> Result<Vec<String>, String> {
 	let iso = iso_path.to_string_lossy().into_owned();
 	let player = root.join("player");
 	let _ = std::fs::create_dir_all(&player);
+	// player/capture: cpu (the safe default: the HUD capture draws on the processor and the frame is presented inline, the
+	// way v0.2.2 did) or gpu (the capture uses the graphics card, the way v0.3.0 does: faster, and the sharp HUD works in
+	// game, but on some drivers the window freezes white at the start). The environment variables win over the file.
+	let capture = std::fs::read_to_string(player.join("capture")).ok().map(|s| s.trim().to_ascii_lowercase());
+	let (gpu_capture, present_thread) = match capture.as_deref() {
+		Some("gpu") => (Some("1"), Some("1")),
+		Some("cpu") => (Some("0"), Some("0")),
+		_ => (None, None),
+	};
 	// SAFETY: still single-threaded (called first in main, after the load-log clock which starts no thread).
 	unsafe {
 		std::env::set_var("ORACLE_ISO", &iso);
 		std::env::set_var("ORACLE_STUBS", root.join("oracle").join("stubs.txt"));
 		std::env::set_var("RAC_PLAYER_DIR", &player);
+		if let Some(v) = gpu_capture {
+			if std::env::var_os("RAC_GSCAP_GPU").is_none() {
+				std::env::set_var("RAC_GSCAP_GPU", v);
+			}
+		}
+		if let Some(v) = present_thread {
+			if std::env::var_os("RAC_PRESENT_THREAD").is_none() {
+				std::env::set_var("RAC_PRESENT_THREAD", v);
+			}
+		}
 		if std::env::var_os("COLD_LANG").is_none() {
 			let lang = lang.filter(|l| ["en", "fr", "de", "es", "it"].contains(&l.as_str())).unwrap_or_else(|| "en".to_string());
 			std::env::set_var("COLD_LANG", lang);
@@ -240,7 +260,15 @@ pub fn main() -> ExitCode {
 	let prev_hook = std::panic::take_hook();
 	std::panic::set_hook(Box::new(move |info| {
 		let thread = std::thread::current();
-		crash_log(&format!("panic in thread {}: {info}", thread.name().unwrap_or("?")));
+		let text = format!("panic in thread {}: {info}", thread.name().unwrap_or("?"));
+		// Also into the run log (runlog.rs), next to what led up to it.
+		eprintln!("{text}");
+		// With the calls that led to it (the first few panics: reading the exe's function names takes a moment).
+		static TRACED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+		if TRACED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 4 {
+			runlog::note_calls();
+		}
+		crash_log(&text);
 		prev_hook(info);
 	}));
 	let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -261,6 +289,9 @@ pub fn main() -> ExitCode {
 			}
 		}
 	}
+	// [PC] The player's run log (runlog.rs): stderr into <player dir>/log.txt when it goes nowhere (the double-clicked game).
+	// After `launch_args` (it sets RAC_PLAYER_DIR while the process is still single-threaded).
+	runlog::start(&retail::memcard::player_dir());
 	let result = match args.first().map(String::as_str) {
 		Some("levels") if args.len() == 2 => cmd_levels(&args[1]),
 		Some("view") if args.len() >= 3 => cmd_view(&args[1..]),
@@ -276,7 +307,10 @@ pub fn main() -> ExitCode {
 		}
 	};
 	match result {
-		Ok(()) => ExitCode::SUCCESS,
+		Ok(()) => {
+			runlog::end();
+			ExitCode::SUCCESS
+		}
 		Err(e) => {
 			eprintln!("error: {e}");
 			crash_log(&format!("error: {e}"));

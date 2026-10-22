@@ -47,17 +47,13 @@ game than fight their way through a build.
   lands in `generated/build.log`, the build is `nice`d so your desktop stays
   usable, and `CARGO_BUILD_JOBS` caps how many cores it takes.
 
-## Coming back
+## Not coming back
 
-One thing the 0.2.2 release had is being brought back to the 0.3.0 branch.
-It is not in this release yet:
+One thing the 0.2.2 release had is not coming back to the 0.3.0 branch:
 
-- **"Reversed" applies to the right stick only.** The camera's reversal options
-  no longer turn the mouse upside down as well.
-
-A third camera style, "Enhanced" (L2 aims, R2 fires), is not coming back:
-every button can be rebound in the game's own Options menu now, which does the
-same thing without a camera mode of its own.
+- **A third camera style, "Enhanced"** (L2 aims, R2 fires). Every button can
+  be rebound in the game's own Options menu now, which does the same thing
+  without a camera mode of its own.
 
 ## Status
 
@@ -372,7 +368,9 @@ by key, as they always have.
 
 With the camera on, hold R2 to strafe. Smooth is the default: it follows
 softly, recentres lazily while you run, looks down at drops and pulls in at
-walls. The camera speed and the lock-on circle are on the same page.
+walls. The camera speed and the lock-on circle are on the same page. The
+camera's "Reversed" options turn the right stick; the mouse keeps its own
+direction.
 
 ## Known issues
 

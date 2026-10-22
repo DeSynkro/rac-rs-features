@@ -76,6 +76,11 @@ CPU core written in Rust. What is new here is the platform and the extras.
 - The Windows installer (`Setup.cmd`, `setup.ps1`) and the automatic updater.
   They are in the upstream repository, not here.
 
+## v0.3.1
+
+- Fixed: on some AMD graphics cards (reported on a Radeon RX 9070 XT) the game window stayed white and "Not Responding" at the start. On AMD and Intel graphics the HUD capture runs on the processor again, as in v0.2.2, and the game hands its pictures to the screen the way v0.2.2 did. NVIDIA cards keep the faster way from v0.3.0. Because of this, on AMD and Intel graphics HUD Sharp only sharpens the title screen and main menu for now; in game, the on-screen text, icons, menus and shop keep the Original look. A card that has never frozen that way can keep the graphics card: write `gpu` in `player/capture.txt`.
+- New: the game writes a log file, `player/log.txt` in your rac-rs folder (the run before is kept as `player/log.prev.txt`). It lists your system and graphics card, what the game did up to the problem, and, when the game freezes, where it got stuck. Please attach it to bug reports (see "Reporting a problem" in the README).
+
 ## v0.3.0
 
 - This update rebuilds the whole game once, so it takes longer than usual: about 10 minutes, up to 20 on slower PCs. Your saves and settings are kept.

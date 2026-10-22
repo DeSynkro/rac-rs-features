@@ -315,6 +315,17 @@ If the game stops with an error or a panic, that is written to
 **`player/crash.log`**, so you can read it afterwards even if you started the
 game from the application menu, where there was no terminal to read.
 
+The whole run is written to **`player/log.txt`** as well: your system and
+graphics card, what the game did up to the point it stopped, and, when it
+froze, where it got stuck. The run before it is kept as `player/log.prev.txt`.
+
+The game draws the two-dimensional layer, the HUD and the menus, with the
+graphics card where it can. On some AMD and Intel cards that made the window
+freeze white at the start, so on those cards the layer is drawn by the
+processor instead. If your card has never done that, you can have the graphics
+card back: write `gpu` in a file named `player/capture.txt` and start the game
+again. The file's absence means the safe setting.
+
 ## Updating
 
 This fork does not have an automatic updater. Pull the changes instead:
@@ -377,6 +388,19 @@ direction.
 - The faint afterimage trail behind Ratchet during Thruster-Pack flight is not
   drawn yet.
 - Some glass surfaces can flicker.
+- On AMD and Intel graphics, the sharp HUD only sharpens the title screen and
+  the main menu for now. In game, the on-screen text, icons, menus and shop
+  keep the Original look.
+
+## Reporting a problem
+
+If the game freezes, crashes or looks wrong, please
+[open an issue](https://github.com/DeSynkro/rac-rs-linux/issues) and attach
+`player/log.txt` from your game folder. The game writes it every time it runs.
+If the game froze, wait about fifteen seconds before you close it: the log then
+also says where it got stuck. The previous run is kept as `player/log.prev.txt`,
+so if you already restarted the game, attach that file instead. The log stays
+on your computer; the game sends it nowhere.
 
 ## For developers
 

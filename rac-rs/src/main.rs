@@ -216,7 +216,7 @@ fn launch_args() -> Result<Vec<String>, String> {
 	// player/capture: cpu (the safe default: the HUD capture draws on the processor and the frame is presented inline, the
 	// way v0.2.2 did) or gpu (the capture uses the graphics card, the way v0.3.0 does: faster, and the sharp HUD works in
 	// game, but on some drivers the window freezes white at the start). The environment variables win over the file.
-	let capture = std::fs::read_to_string(player.join("capture")).ok().map(|s| s.trim().to_ascii_lowercase());
+	let capture = std::fs::read_to_string(player.join("capture.txt")).ok().map(|s| s.trim().to_ascii_lowercase());
 	let (gpu_capture, present_thread) = match capture.as_deref() {
 		Some("gpu") => (Some("1"), Some("1")),
 		Some("cpu") => (Some("0"), Some("0")),

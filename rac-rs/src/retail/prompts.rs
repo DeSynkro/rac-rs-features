@@ -263,10 +263,15 @@ pub fn substitute_text(s: &[u8], ctx: Ctx, id: u32) -> Option<Vec<u8>> {
 	if !s.iter().any(|&b| (CROSS..=LSTICK).contains(&b)) {
 		return None;
 	}
-	// A gamepad's buttons named the way the style says (the Xbox's letters, the Switch's): the names replace the glyphs, in the
-	// menus as well, so the whole screen speaks one lettering.
+	// A gamepad's buttons: with the artwork in the font's cells the pictures are drawn where the retail would have
+	// drawn its own symbols, so the string is left alone; without it the names stand in for the symbols, in the menus as
+	// well, so the whole screen speaks one lettering.
 	if ctx.glyph_style != STYLE_PS {
-		return Some(substitute_style(s, ctx.glyph_style));
+		return if super::xglyphs::artwork_in_place() {
+			None
+		} else {
+			Some(substitute_style(s, ctx.glyph_style))
+		};
 	}
 	let short_line = (CROSS..=LSTICK).contains(&s[0]) && s.len() <= LEGEND_MAX_BYTES;
 	if let Some(sc) = ctx.menu.filter(|_| short_line || MENU_TEXTS.contains(&(id as u16))) {
@@ -1032,6 +1037,9 @@ mod tests {
 
 	const KBD: Ctx = Ctx { modern_camera: true, menu: None, glyph_style: STYLE_PS };
 
+	/// The tests that change the artwork's flag take this, so they do not run into each other.
+	static STYLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 	/// The glyph hook displaces no other hand: no registered hand shares an entry with a wrapper twin (it declines, retail draws).
 	#[test]
 	fn glyph_hook_displaces_no_hand() {
@@ -1069,6 +1077,9 @@ mod tests {
 	/// other way round. The keyboard's own names are not touched by the style.
 	#[test]
 	fn glyphs_become_the_styles_names() {
+		// The names are the fallback: with the artwork in the font's cells the glyphs are drawn instead.
+		let _lock = STYLE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+		crate::retail::xglyphs::set_artwork_in_place(false);
 		let xbox = Ctx { modern_camera: true, menu: None, glyph_style: STYLE_XBOX };
 		let switch = Ctx { modern_camera: true, menu: None, glyph_style: STYLE_SWITCH };
 		// The four face buttons: the Xbox's A bottom, B right, X left, Y top; the Switch's are the other way round.
@@ -1084,6 +1095,18 @@ mod tests {
 		// The rest of the line is kept, and a string without a glyph is left alone.
 		assert_eq!(substitute(b"press \x13 to fire", xbox).unwrap(), b"press X to fire");
 		assert!(substitute(b"no glyph here", xbox).is_none());
+	}
+
+	/// With the artwork in the font's cells the glyphs are left alone: the pictures are drawn where the retail would have
+	/// drawn its own symbols.
+	#[test]
+	fn the_style_leaves_the_glyphs_alone_when_the_artwork_is_in_place() {
+		let _lock = STYLE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+		let xbox = Ctx { modern_camera: true, menu: None, glyph_style: STYLE_XBOX };
+		crate::retail::xglyphs::set_artwork_in_place(true);
+		assert!(substitute(b"\x10 \x11 \x12 \x13", xbox).is_none(), "the glyphs are left alone");
+		crate::retail::xglyphs::set_artwork_in_place(false);
+		assert_eq!(substitute(b"\x10 \x11", xbox).unwrap(), b"A B");
 	}
 
 	/// Menu legends name the keys of the screen's table (menu_keys.rs): the Quit Game answers, the default page legends,

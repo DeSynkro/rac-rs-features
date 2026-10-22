@@ -25,11 +25,11 @@ CPU core written in Rust. What is new here is the platform and the extras.
 - **Gamepad support.** Xbox-style and PlayStation controllers are read as
   evdev devices, with full analog sticks and triggers. A controller connected
   while the game is running is picked up without a restart.
-- **Xbox button glyphs.** The button prompts name the buttons the way an Xbox
-  pad does (`A` `B` `X` `Y` `LB` `RB` `LT` `RT` `R3` `L3`) instead of drawing the
-  retail's own PlayStation glyphs. A third style draws the Nintendo Switch's
-  letters, where the `A` and `B` and the `X` and `Y` are the other way round.
-  The style is a row in the Graphics menu, and Xbox is the default.
+- **Xbox button glyphs.** The button prompts can show the buttons as pictures,
+  the green A disc and the rest, the way an Xbox pad labels them, instead of
+  the retail's own PlayStation shapes. A third style draws the Nintendo
+  Switch's, where the four face buttons are the other way round. The style is a
+  row in the Graphics menu, and Xbox is the default.
 - **Prompts that follow your hands.** The prompts show the key names with
   mouse and keyboard, and the button names with a controller, switching by
   themselves as you use each.

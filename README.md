@@ -33,10 +33,10 @@ game than fight their way through a build.
   controller plugged in while the game is running is picked up straight away.
 - **Prompts that follow your hands.** Mouse and keyboard shows the key names,
   a controller shows the button names, and the game switches between them by
-  itself as you use each. A controller's buttons are named the way your pad
-  labels them: the PlayStation shapes the game came with, the Xbox letters
-  `A` `B` `X` `Y`, or the Nintendo Switch's, where the `A` and `B` and the `X`
-  and `Y` are the other way round. Pick the one you want in the Graphics menu.
+  itself as you use each. A controller's buttons can be shown as the PlayStation
+  shapes the game came with, as Xbox pictures, or as the Nintendo Switch's,
+  where the four face buttons are the other way round. Pick the one you want in
+  the Graphics menu.
 - **The controller skips cutscenes.** Start skips, like Spacebar does. The
   Insomniac intro at the start of the game can be skipped too, at last.
 - **A crash log.** Panics and errors are written to `player/crash.log`, so you
@@ -342,9 +342,9 @@ Controllers work too: Xbox-style controllers and PlayStation controllers
 (PS4 DualShock 4 and PS5 DualSense, over USB or Bluetooth), also when you
 switch one on or plug it in after the game has started.
 
-A controller's buttons are named the way your pad labels them, and you pick
-the lettering in the Graphics menu, on the title screen (Options > Graphics)
-or in the game (Pause > Options > Graphics > Screen):
+A controller's buttons are shown the way your pad labels them, and you pick
+the style in the Graphics menu, on the title screen (Options > Graphics) or in
+the game (Pause > Options > Graphics > Screen):
 
 | | PlayStation | Xbox | Switch |
 |---|---|---|---|
@@ -356,10 +356,13 @@ or in the game (Pause > Options > Graphics > Screen):
 | The triggers | L2, R2 | LT, RT | LT, RT |
 | The sticks | L3, R3 | L3, R3 | L3, R3 |
 
-PlayStation draws the shapes the game came with, Xbox and Switch write the
-letters instead, so a prompt says "A" rather than showing a cross. Xbox is the
-default. The lettering is for a controller: with the keyboard the prompts name
-the buttons by key, as they always have.
+PlayStation shows the shapes the game came with. Xbox and Switch show the
+buttons as pictures, the green A disc and the rest, with the four face buttons
+the other way round for the Switch, whose bottom button is B and whose right
+one is A. Xbox is the default.
+
+The style is for a controller: with the keyboard the prompts name the buttons
+by key, as they always have.
 
 | | Classic | Static | Smooth |
 |---|---|---|---|
@@ -406,9 +409,8 @@ installer.
 The original project's `NOTICE.md` and `LICENSE` are kept, and the credits for
 the third-party work it builds on are in [NOTICE.md](NOTICE.md).
 
-The Xbox button artwork in [`xboxglyphs/`](xboxglyphs/README.md) is
-[Xbox Buttons](https://arks.itch.io/xbox-buttons) (c) 2020 by ArksDigital,
-under the Creative Commons Attribution 4.0 International licence.
+The Xbox button artwork in [`xboxglyphs/`](xboxglyphs/README.md) is part of
+that work: the fork's own drawings of the buttons, not Microsoft's.
 
 ## Legal
 
@@ -416,14 +418,13 @@ This is a fan project for preservation and education. It is **not affiliated
 with, endorsed by or sponsored by Sony Interactive Entertainment or
 Insomniac Games**. "Ratchet & Clank" is a trademark of Sony Interactive
 Entertainment LLC. All game content belongs to its owners. "Xbox" is a
-trademark of Microsoft; the button artwork is third-party work, credited
-below.
+trademark of Microsoft; the button artwork in `xboxglyphs/` is the fork's own
+drawing of the buttons, not Microsoft's.
 
 The repository contains only original source code and tools, apart from the
-Xbox button artwork in [`xboxglyphs/`](xboxglyphs/README.md), which is
-third-party work under the Creative Commons Attribution 4.0 International
-licence. It contains no copyrighted game data, and it does not tell you how to
-get the game other than from a disc you own.
+Xbox button artwork in [`xboxglyphs/`](xboxglyphs/README.md), which is the
+fork's own work. It contains no copyrighted game data, and it does not tell
+you how to get the game other than from a disc you own.
 
 The Windows installer, the automatic updater and the Windows release of the
 game live in the [upstream repository](https://github.com/AsobiCodes/rac-rs),

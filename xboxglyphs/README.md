@@ -16,9 +16,11 @@ instead of the retail's own PlayStation glyphs. These are the pictures they use.
 | right stick | `0x18` | `rs.png` | R3 |
 | left stick | `0x19` | `ls.png` | L3 |
 
-The pictures are 480 by 480 pixels with an alpha channel. The game scales them
-down to the size of the prompt's button cell, so they can be replaced with
-anything of the same kind.
+The pictures keep their own shape, and the game scales each one to the size of
+the prompt's button cell (24 by 16 pixels, the size of the retail's own button
+cells) and puts it in the font's cells, so a picture can be replaced with
+anything of the same kind. `tools/make_xbox_glyphs.py` makes the small copies
+the game reads (`rac-rs/assets/glyphs/`).
 
 The rest of the set (the D-pad, the stick directions and the Menu, View, Back
 and Start buttons) has no cell in the retail's font, so it is not in this
@@ -26,9 +28,8 @@ folder.
 
 ## Licence
 
-Xbox Buttons (c) 2020 by ArksDigital, from https://arks.itch.io/xbox-buttons,
-licensed under the Creative Commons Attribution 4.0 International licence
-(CC BY 4.0), https://creativecommons.org/licenses/by/4.0/.
-
-The changes made here: the pictures were renamed, and the ones this fork does
-not use were left out.
+The pictures are the fork's own work, drawn for it by
+[DeSynkro](https://github.com/DeSynkro), and are under the repository's own
+licence (GPL-3.0-or-later, see [LICENSE](../LICENSE)). The Xbox name and the
+buttons themselves are Microsoft's trademarks: these are the fork's own
+drawings of them, not Microsoft's artwork.

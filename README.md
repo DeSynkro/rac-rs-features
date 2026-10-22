@@ -387,16 +387,24 @@ installer.
 The original project's `NOTICE.md` and `LICENSE` are kept, and the credits for
 the third-party work it builds on are in [NOTICE.md](NOTICE.md).
 
+The Xbox button artwork in [`xboxglyphs/`](xboxglyphs/README.md) is
+[Xbox Buttons](https://arks.itch.io/xbox-buttons) (c) 2020 by ArksDigital,
+under the Creative Commons Attribution 4.0 International licence.
+
 ## Legal
 
 This is a fan project for preservation and education. It is **not affiliated
 with, endorsed by or sponsored by Sony Interactive Entertainment or
 Insomniac Games**. "Ratchet & Clank" is a trademark of Sony Interactive
-Entertainment LLC. All game content belongs to its owners.
+Entertainment LLC. All game content belongs to its owners. "Xbox" is a
+trademark of Microsoft; the button artwork is third-party work, credited
+below.
 
-The repository contains only original source code and tools. It contains no
-copyrighted game data, and it does not tell you how to get the game other
-than from a disc you own.
+The repository contains only original source code and tools, apart from the
+Xbox button artwork in [`xboxglyphs/`](xboxglyphs/README.md), which is
+third-party work under the Creative Commons Attribution 4.0 International
+licence. It contains no copyrighted game data, and it does not tell you how to
+get the game other than from a disc you own.
 
 The Windows installer, the automatic updater and the Windows release of the
 game live in the [upstream repository](https://github.com/AsobiCodes/rac-rs),

@@ -33,7 +33,10 @@ game than fight their way through a build.
   controller plugged in while the game is running is picked up straight away.
 - **Prompts that follow your hands.** Mouse and keyboard shows the key names,
   a controller shows the button names, and the game switches between them by
-  itself as you use each.
+  itself as you use each. A controller's buttons are named the way your pad
+  labels them: the PlayStation shapes the game came with, the Xbox letters
+  `A` `B` `X` `Y`, or the Nintendo Switch's, where the `A` and `B` and the `X`
+  and `Y` are the other way round. Pick the one you want in the Graphics menu.
 - **The controller skips cutscenes.** Start skips, like Spacebar does. The
   Insomniac intro at the start of the game can be skipped too, at last.
 - **A crash log.** Panics and errors are written to `player/crash.log`, so you
@@ -46,12 +49,9 @@ game than fight their way through a build.
 
 ## Coming back
 
-Two things the 0.2.2 release had are being brought back to the 0.3.0 branch.
-They are not in this release yet:
+One thing the 0.2.2 release had is being brought back to the 0.3.0 branch.
+It is not in this release yet:
 
-- **Xbox button glyphs.** The prompts can name the buttons the way an Xbox pad
-  does: `A` `B` `X` `Y` `LB` `RB` `LT` `RT` `R3` `L3`. Switch back to the
-  original PlayStation shapes whenever you like.
 - **"Reversed" applies to the right stick only.** The camera's reversal options
   no longer turn the mouse upside down as well.
 
@@ -341,6 +341,25 @@ Options > Controls for the buttons).
 Controllers work too: Xbox-style controllers and PlayStation controllers
 (PS4 DualShock 4 and PS5 DualSense, over USB or Bluetooth), also when you
 switch one on or plug it in after the game has started.
+
+A controller's buttons are named the way your pad labels them, and you pick
+the lettering in the Graphics menu, on the title screen (Options > Graphics)
+or in the game (Pause > Options > Graphics > Screen):
+
+| | PlayStation | Xbox | Switch |
+|---|---|---|---|
+| The bottom button | Cross | A | B |
+| The right button | Circle | B | A |
+| The top button | Triangle | Y | X |
+| The left button | Square | X | Y |
+| The shoulders | L1, R1 | LB, RB | LB, RB |
+| The triggers | L2, R2 | LT, RT | LT, RT |
+| The sticks | L3, R3 | L3, R3 | L3, R3 |
+
+PlayStation draws the shapes the game came with, Xbox and Switch write the
+letters instead, so a prompt says "A" rather than showing a cross. Xbox is the
+default. The lettering is for a controller: with the keyboard the prompts name
+the buttons by key, as they always have.
 
 | | Classic | Static | Smooth |
 |---|---|---|---|

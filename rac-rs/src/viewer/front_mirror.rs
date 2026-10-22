@@ -231,6 +231,10 @@ impl App {
 			for (id, s) in crate::retail::pcext::texts(lang) {
 				fe.text.insert(id, s);
 			}
+			// The Controls page's own texts, and the Button glyphs row the title screen's Graphics page shows.
+			for (id, s) in crate::retail::pcctl::fixed_texts(lang) {
+				fe.text.insert(id, s);
+			}
 		}
 		let slots: [Option<save::Summary>; save::SLOTS] = std::array::from_fn(|i| fr.slots.get(i).copied().flatten().map(|(level, bolts, play_frames, date)| save::Summary { level: level as usize, bolts, play_frames, date }));
 		match snap.as_ref().map(|m| (page_of(Some(m)), m)) {

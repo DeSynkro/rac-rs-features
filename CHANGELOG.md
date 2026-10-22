@@ -1,5 +1,81 @@
 # Changelog
 
+## Linux fork
+
+This fork carries rac-rs v0.3.0 over to Linux. The game itself is unchanged: it
+is still the original PS2 code, recompiled from your own disc and run on a PS2
+CPU core written in Rust. What is new here is the platform and the extras.
+
+### Added
+
+- **A Docker build.** `sudo docker compose up` builds the game in a container
+  that already has everything it needs, so there is nothing to install on your
+  machine. It also builds the game against an older C library, so what it
+  produces runs on more systems, a Steam Deck included.
+- **An `install-desktop-launcher.sh` script** adds a "Ratchet & Clank
+  (rac-rs)" entry to your application menu. It writes one small file to your
+  home folder and nothing else, and it works whichever way you built the game.
+- **A `clean.sh` script** removes what the build left behind: the game code
+  generated from your disc and the compiler's working files, a couple of
+  gigabytes in all. It keeps the game and your disc path, so the game still
+  starts.
+- **A native Linux build.** `setup.sh` and `play.sh` replace the Windows
+  `Setup.cmd` and `setup.ps1`. Your system Rust and Python are used as they
+  are, so the 1.2 GB private toolchain download does not happen.
+- **Gamepad support.** Xbox-style and PlayStation controllers are read as
+  evdev devices, with full analog sticks and triggers. A controller connected
+  while the game is running is picked up without a restart.
+- **Xbox button glyphs.** The button prompts name the buttons the way an Xbox
+  pad does (`A` `B` `X` `Y` `LB` `RB` `LT` `RT` `R3` `L3`) instead of drawing the
+  retail's own PlayStation glyphs. A third style draws the Nintendo Switch's
+  letters, where the `A` and `B` and the `X` and `Y` are the other way round.
+  The style is a row in the Graphics menu, and Xbox is the default.
+- **Prompts that follow your hands.** The prompts show the key names with
+  mouse and keyboard, and the button names with a controller, switching by
+  themselves as you use each.
+- **The controller skips cutscenes.** Start skips, like Spacebar does. The
+  Insomniac intro at the start of the game can be skipped too.
+- **A crash log.** Panics and errors are written to `player/crash.log`, the
+  same place the Windows build puts them, so there is a record of a failure
+  even when the game was started from the application menu with no terminal
+  there to read.
+- **A `rom` folder.** Drop your disc image in it and the setup finds it. With
+  more than one image the setup asks which to use.
+- **A build log** in `generated/build.log`, and the build is `nice`d so your
+  desktop stays usable while it runs.
+- **The unit tests work from a fresh checkout.** They make the folder they
+  write their images to, and the README says how to point them at your disc.
+  Only `retail::memcard` still fails: it wants a savestate from the upstream
+  project's own test data, which is not in a public checkout.
+
+### Changed
+
+- **The game is now upstream's v0.3.0.** The Graphics page has three pages
+  now, Picture, Effects and Screen, with quality levels, global illumination,
+  waves, vegetation, a draw distance, frame smoothing and a sharp HUD, and
+  every button can be rebound in the game's own Options menu. Upstream's own
+  changelog is below.
+- **The camera row offers Classic, Static and Smooth**, the styles v0.3.0
+  brought in. "Enhanced" (L2 aims, R2 fires) is not in this fork: every button
+  can be rebound in the game's own Options menu now, which does the same thing
+  without a camera style of its own.
+- **"Reversed" in the camera options now applies to the right stick only.**
+  The mouse keeps its own direction.
+- **The setup waits for a key at the end**, so a run started from a file
+  manager keeps its window open. `--no-pause` skips the wait.
+- **`play.sh` no longer needs fish.** It is plain shell now, so you can start
+  the game without installing anything.
+- **Nothing needs fish any more.** The setup script is plain POSIX shell, so it
+  runs under whatever `/bin/sh` is on your system, and fish is not in the list
+  of things to install.
+- **`--install-launcher` is now `install-desktop-launcher.sh`.** The flag is
+  gone. The script does the same job, and it also works after a Docker build.
+
+### Removed
+
+- The Windows installer (`Setup.cmd`, `setup.ps1`) and the automatic updater.
+  They are in the upstream repository, not here.
+
 ## v0.3.0
 
 - This update rebuilds the whole game once, so it takes longer than usual: about 10 minutes, up to 20 on slower PCs. Your saves and settings are kept.

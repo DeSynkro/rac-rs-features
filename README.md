@@ -377,16 +377,15 @@ it fails here. Everything else passes.
 **[rac-rs](https://github.com/AsobiCodes/rac-rs)** by
 [AsobiCodes](https://github.com/AsobiCodes) is the original project, and
 essentially all of it. The Linux port, the gamepad support, the Xbox button
-glyphs, the third camera style and the cutscene skip are the work of
+glyphs and the cutscene skip are the work of
 **[DeSynkro](https://github.com/DeSynkro)**, who did it for Linux users and
 for anyone who would rather just play the game than fight a Windows
 installer.
 
 [OpenCode](https://opencode.ai) was used for a portion of the work.
 
-The original project's `README.md`, `NOTICE.md` and `LICENSE` are kept, and
-the credits for the third-party work it builds on are in
-[NOTICE.md](NOTICE.md).
+The original project's `NOTICE.md` and `LICENSE` are kept, and the credits for
+the third-party work it builds on are in [NOTICE.md](NOTICE.md).
 
 ## Legal
 

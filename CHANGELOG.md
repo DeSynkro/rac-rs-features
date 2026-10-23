@@ -87,6 +87,7 @@ CPU core written in Rust. What is new here is the platform and the extras.
 - New: the game writes a log file, `player/log.txt` in your rac-rs folder (the run before is kept as `player/log.prev.txt`). It lists your system and graphics card, what the game did up to the problem, and, when the game freezes, where it got stuck. Please attach it to bug reports (see "Reporting a problem" in the README).
 - Fixed: the game now starts in the language you chose in its own menu. The choice was saved in `player/pc_options.txt` all along, but the game always told the console to start in English, so the saved one was never used (upstream issue #11).
 - Fixed: the Language page's list had German and Spanish the other way round, so choosing one of them set the other. The page now lists the languages in the order the game itself lists them in.
+- Fixed: a saved game had no date. The game reads the console's clock before it saves, and the emulated console had no clock, so every save carried a blank date. Saves now take your PC's local time, on the memory card too, and the Load Game screen shows when you saved, day/month/year. Saves made before this keep their blank date until you save over them.
 
 ## v0.3.0
 

@@ -398,13 +398,14 @@ pub struct Summary {
 	pub level: usize,
 	pub bolts: u32,
 	pub play_frames: u32,
-	/// Month, day, year bytes (BCD) of the clock record, printed as "%02x/%02x/%02x".
+	/// Month, day, year bytes (BCD) of the clock record, printed as day/month/year.
 	pub date: [u8; 3],
 }
 
 impl Summary {
+	/// The date as day, month and year, two digits each.
 	pub fn date_text(&self) -> String {
-		format!("{:02x}/{:02x}/{:02x}", self.date[0], self.date[1], self.date[2])
+		format!("{:02x}/{:02x}/{:02x}", self.date[1], self.date[0], self.date[2])
 	}
 }
 
@@ -494,5 +495,12 @@ mod tests {
 		assert_eq!(find_or_claim(&mut t, 5), 63);
 		assert_eq!(find_or_claim(&mut t, 9), 62);
 		assert_eq!(find_or_claim(&mut t, -1), -1);
+	}
+
+	/// The slot row prints the date the way the local player writes it: day, then month, then year.
+	#[test]
+	fn the_slot_row_shows_day_month_year() {
+		let s = Summary { level: 0, bolts: 0, play_frames: 0, date: [0x10, 0x23, 0x26] };
+		assert_eq!(s.date_text(), "23/10/26");
 	}
 }
